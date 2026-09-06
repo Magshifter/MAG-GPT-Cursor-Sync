@@ -68,7 +68,7 @@ async function sendToChatGPT(context) {
 function activate(context) {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	item.text = "→ ChatGPT";
-	item.tooltip = "Paste clipboard into ChatGPT";
+	item.tooltip = "Send clipboard to ChatGPT";
 	item.color = "#89D185";
 	item.command = COMMAND_ID;
 	item.show();

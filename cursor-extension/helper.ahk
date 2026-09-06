@@ -5,15 +5,15 @@
 ; MAG Workflow Bridge — Cursor one-shot helper
 ; by Magshifter
 ;
-; Activates ChatGPT and pastes the current clipboard.
-; Never sends Enter, Submit, or Send.
+; Activates ChatGPT, pastes the current clipboard, then submits.
+; Used only by the Cursor → ChatGPT status bar button.
 ; Does not stay loaded.
 
-exitCode := PasteToChatGPT()
-Sleep 150
+exitCode := SendClipboardToChatGPT()
+Sleep 50
 ExitApp exitCode
 
-PasteToChatGPT()
+SendClipboardToChatGPT()
 {
     hwnds := WinGetList("ahk_exe ChatGPT.exe")
     if hwnds.Length = 0
@@ -31,6 +31,8 @@ PasteToChatGPT()
     }
 
     Send "^v"
+    Sleep 150
+    Send "{Enter}"
     return 0
 }
 

@@ -16,11 +16,9 @@ This is not a numbered MAG Ecosystem project.
 
 ## Safety model
 
-The bridge never automatically presses Enter, Submit, or Send.
+Global hotkeys never press Enter, Submit, or Send. They activate the target app and paste the clipboard. You review and submit or execute yourself.
 
-It only activates the target application and pastes the current clipboard content.
-
-You always review the pasted text and submit or execute it yourself.
+The Cursor status bar button **→ ChatGPT** is different: clicking it is explicit send intent. It pastes the clipboard into ChatGPT desktop and then submits that message.
 
 ## Requirement
 
@@ -77,18 +75,17 @@ If you move or re-clone the repository, the existing shortcut still points at th
 
 ## Cursor native button
 
-The Cursor status bar item **→ ChatGPT** pastes the **current clipboard** into the ChatGPT desktop app, then stops. It never presses Enter, Submit, or Send. It does not read or copy a Cursor Agent response by itself.
+**→ ChatGPT** (status bar) sends the **current clipboard** to the ChatGPT desktop app: paste, then automatic Send. It does not copy a Cursor Agent response by itself.
 
 To send a specific Agent response:
 
 1. Click Cursor's native **Copy Message** on that response.
 2. Click **→ ChatGPT**.
-3. ChatGPT activates and the copied text is pasted.
-4. Review and send the message yourself.
+3. ChatGPT activates, the copied text is pasted, and the message is sent.
 
-This two-step flow is required because MAG Workflow Bridge cannot attach to Cursor's internal per-message UI.
+If you want to edit before sending, use **Copy Message** and `Ctrl+Alt+G` (paste only), or paste manually.
 
-It is the same paste action as `Ctrl+Alt+G`. Browser ChatGPT is not used.
+`Ctrl+Alt+G` still pastes only. Browser ChatGPT is not used.
 
 After `setup.ps1`, Cursor copies the extension (including `helper.ahk`) into its own extensions folder. The button does not depend on a junction back to this repository.
 
