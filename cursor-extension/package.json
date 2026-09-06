@@ -1,0 +1,25 @@
+{
+	"name": "mag-workflow-bridge",
+	"displayName": "MAG Workflow Bridge",
+	"description": "Native Cursor status bar action to paste the clipboard into the ChatGPT desktop app.",
+	"version": "0.0.1",
+	"publisher": "magshifter",
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "magWorkflowBridge.sendToChatGPT",
+				"title": "MAG Workflow Bridge: Paste into ChatGPT"
+			}
+		]
+	}
+}

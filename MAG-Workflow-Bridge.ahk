@@ -11,6 +11,9 @@
 ; Ctrl+Alt+T -> Windows Terminal
 ; Ctrl+Alt+G -> ChatGPT
 
+A_IconTip := "MAG Workflow Bridge"
+InitTray()
+
 ^!c:: PasteToTarget("Cursor.exe", "Cursor")
 ^!t:: PasteToTarget("WindowsTerminal.exe", "Windows Terminal")
 ^!g:: PasteToTarget("ChatGPT.exe", "ChatGPT")
@@ -33,6 +36,59 @@ PasteToTarget(exeName, displayName)
     }
 
     Send "^v"
+}
+
+StartupShortcutPath()
+{
+    return A_Startup "\MAG Workflow Bridge.lnk"
+}
+
+StartupIsEnabled()
+{
+    return FileExist(StartupShortcutPath()) ? true : false
+}
+
+InitTray()
+{
+    A_TrayMenu.Delete()
+    A_TrayMenu.Add("Enable startup", EnableStartup)
+    A_TrayMenu.Add("Disable startup", DisableStartup)
+    A_TrayMenu.Add()
+    A_TrayMenu.Add("Exit", (*) => ExitApp())
+    RefreshTray()
+}
+
+RefreshTray()
+{
+    if StartupIsEnabled()
+    {
+        A_TrayMenu.Disable("Enable startup")
+        A_TrayMenu.Enable("Disable startup")
+    }
+    else
+    {
+        A_TrayMenu.Enable("Enable startup")
+        A_TrayMenu.Disable("Disable startup")
+    }
+}
+
+EnableStartup(*)
+{
+    linkPath := StartupShortcutPath()
+    SplitPath A_LineFile, , &bridgeDir
+    args := '"' A_LineFile '"'
+    FileCreateShortcut(A_AhkPath, linkPath, bridgeDir, args, "MAG Workflow Bridge")
+    RefreshTray()
+    Notify("Startup enabled.")
+}
+
+DisableStartup(*)
+{
+    linkPath := StartupShortcutPath()
+    if FileExist(linkPath)
+        FileDelete linkPath
+    RefreshTray()
+    Notify("Startup disabled.")
 }
 
 Notify(message)
