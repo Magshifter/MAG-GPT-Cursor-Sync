@@ -24,14 +24,23 @@ You always review the pasted text and submit or execute it yourself.
 
 ## Requirement
 
-AutoHotkey v2
+AutoHotkey v2 and Cursor (for the status bar button).
 
-## Running
+## Installation
 
 1. Install AutoHotkey v2.
-2. Clone or download this repository.
-3. Run `MAG-Workflow-Bridge.ahk`.
-4. Optionally load the Cursor extension (see **Cursor native button**).
+2. Clone or download MAG Workflow Bridge.
+3. In PowerShell, from the repository folder, run:
+
+```powershell
+.\setup.ps1
+```
+
+4. Reload Cursor if it is already open.
+5. Run `MAG-Workflow-Bridge.ahk`.
+6. Optional: tray menu → **Enable startup**.
+
+`setup.ps1` packages the Cursor extension and installs it with Cursor CLI. It does not enable Windows startup and does not launch ChatGPT, Cursor, or Windows Terminal.
 
 The script stays loaded while AutoHotkey is running. Use **Exit** on the tray menu, or exit AutoHotkey, to stop the hotkeys.
 
@@ -81,11 +90,19 @@ This two-step flow is required because MAG Workflow Bridge cannot attach to Curs
 
 It is the same paste action as `Ctrl+Alt+G`. Browser ChatGPT is not used.
 
-Local load (not Marketplace published):
+After `setup.ps1`, Cursor copies the extension (including `helper.ahk`) into its own extensions folder. The button does not depend on a junction back to this repository.
 
-1. Copy or junction `cursor-extension` to `%USERPROFILE%\.cursor\extensions\magshifter.mag-workflow-bridge-0.0.1`.
-2. Reload Cursor.
-3. Keep AutoHotkey v2 installed. The button launches `cursor-extension/helper.ahk` as a one-shot paste. The persistent MAG Workflow Bridge tray script can keep running separately.
+## Removal
+
+1. If startup is enabled, use the tray menu **Disable startup**.
+2. Use the tray menu **Exit** to stop MAG Workflow Bridge.
+3. Uninstall the Cursor extension:
+
+```powershell
+cursor --uninstall-extension magshifter.mag-workflow-bridge
+```
+
+Do not uninstall AutoHotkey unless you no longer need it. Do not delete the repository unless you want to remove the source files.
 
 ## Known limitations
 
