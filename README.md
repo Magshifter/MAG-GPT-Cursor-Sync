@@ -40,8 +40,11 @@ ChatGPT Copy → invoke Cursor Agent action → `composer.focusComposer` → pas
 
 Triggers:
 
+- ChatGPT companion action bar: **Cursor Agent**
+- Tray: **Cursor Agent**
 - Command Palette: `[MAG] GPT|Cursor|Sync: Send Clipboard to Cursor Agent`
-- Tray: **Cursor Agent** (`cursor://magshifter.mag-workflow-bridge/agent`)
+
+URI: `cursor://magshifter.mag-workflow-bridge/agent`
 
 **ChatGPT → Cursor Terminal**
 
@@ -49,8 +52,11 @@ ChatGPT Copy → invoke Cursor Terminal action → active Cursor integrated term
 
 Triggers:
 
+- ChatGPT companion action bar: **Cursor Terminal**
+- Tray: **Cursor Terminal**
 - Command Palette: `[MAG] GPT|Cursor|Sync: Execute Clipboard in Cursor Terminal`
-- Tray: **Cursor Terminal** (`cursor://magshifter.mag-workflow-bridge/terminal`)
+
+URI: `cursor://magshifter.mag-workflow-bridge/terminal`
 
 That is not Windows Terminal. `Ctrl+Alt+T` still pastes only into Windows Terminal.
 
@@ -58,9 +64,30 @@ If no integrated terminal is active, the command warns and does nothing. Multi-l
 
 `Ctrl+Alt+C` does not submit to Agent.
 
-## Planned
+## ChatGPT companion action bar
 
-ChatGPT-side buttons `[ Cursor Agent ] [ Cursor Terminal ]` inside the ChatGPT app are **not implemented**. ChatGPT is not patched. Browser extensions are not used.
+This is a MAG-controlled Windows companion UI. It is **not** a native ChatGPT plugin. It does not patch, inject, or modify ChatGPT.
+
+While ChatGPT desktop (`ChatGPT.exe`) is active, a small bar with **Cursor Agent** and **Cursor Terminal** appears next to that window. It hides when ChatGPT is not active. Browser ChatGPT is not supported.
+
+**ChatGPT → Cursor Agent**
+
+1. Copy the desired ChatGPT text normally.
+2. Click **Cursor Agent** on the companion action bar.
+3. Cursor activates.
+4. Agent receives the clipboard.
+5. The prompt is submitted automatically.
+
+**ChatGPT → Cursor Terminal**
+
+1. Copy a single-line command normally.
+2. Click **Cursor Terminal**.
+3. Cursor activates.
+4. The active Cursor integrated terminal executes it automatically.
+
+Tray **Cursor Agent** / **Cursor Terminal** remain as a fallback. Tray **ChatGPT action bar** enables or disables the companion for the current session (default enabled; not persisted). Existing Startup still launches this same script, so the companion is available after login if startup is enabled.
+
+Native buttons inside the ChatGPT app remain **planned, not implemented**.
 
 ## Safety model
 
@@ -69,8 +96,8 @@ Global hotkeys never press Enter, Submit, or Send. They activate the target app 
 These actions are explicit execute intent:
 
 - **→ ChatGPT** (status bar)
-- Cursor Agent (Command Palette or tray)
-- Cursor Terminal (Command Palette or tray)
+- Cursor Agent (companion bar, tray, or Command Palette)
+- Cursor Terminal (companion bar, tray, or Command Palette)
 
 If you want to edit first, use Copy and paste (`Ctrl+Alt+C` / `Ctrl+Alt+T` / `Ctrl+Alt+G`) instead.
 
@@ -94,7 +121,7 @@ AutoHotkey v2 and Cursor (for the status bar button and Cursor actions).
 
 `setup.ps1` packages the Cursor extension and installs it with Cursor CLI. It does not enable Windows startup and does not launch ChatGPT, Cursor, or Windows Terminal.
 
-The script stays loaded while AutoHotkey is running. Use **Exit** on the tray menu, or exit AutoHotkey, to stop the hotkeys and tray actions.
+The script stays loaded while AutoHotkey is running. Use **Exit** on the tray menu, or exit AutoHotkey, to stop the hotkeys, tray actions, and ChatGPT companion action bar.
 
 ## Current targets
 
@@ -150,7 +177,8 @@ Do not uninstall AutoHotkey unless you no longer need it. Do not delete the repo
 - The target application must already be running for paste hotkeys. The product does not launch apps from those hotkeys.
 - Paste goes to whichever control already has focus inside the activated window.
 - Multiple matching windows may select the most recently active one.
-- Cursor URI actions target the topmost Cursor window, not every window.
+- Cursor URI actions target the topmost Cursor window, not a user-selected window.
+- The ChatGPT companion action bar tracks ChatGPT desktop only. It is not injected into ChatGPT.
 - Hotkeys can conflict with third-party software.
 - An elevated app may block interaction from an unelevated script (Windows privilege isolation).
 - An existing Startup shortcut still points at the old script path if the repository is moved.
