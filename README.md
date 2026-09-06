@@ -68,9 +68,18 @@ If you move or re-clone the repository, the existing shortcut still points at th
 
 ## Cursor native button
 
-The Cursor status bar item **→ ChatGPT** uses Cursor's native extension API. It activates the ChatGPT desktop app, pastes the current clipboard, and stops. It never presses Enter, Submit, or Send.
+The Cursor status bar item **→ ChatGPT** pastes the **current clipboard** into the ChatGPT desktop app, then stops. It never presses Enter, Submit, or Send. It does not read or copy a Cursor Agent response by itself.
 
-It is the same user-controlled action as `Ctrl+Alt+G`. Browser ChatGPT is not used.
+To send a specific Agent response:
+
+1. Click Cursor's native **Copy Message** on that response.
+2. Click **→ ChatGPT**.
+3. ChatGPT activates and the copied text is pasted.
+4. Review and send the message yourself.
+
+This two-step flow is required because MAG Workflow Bridge cannot attach to Cursor's internal per-message UI.
+
+It is the same paste action as `Ctrl+Alt+G`. Browser ChatGPT is not used.
 
 Local load (not Marketplace published):
 
