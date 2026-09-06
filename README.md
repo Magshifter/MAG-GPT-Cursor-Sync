@@ -1,10 +1,12 @@
-# MAG Workflow Bridge
+# [MAG] GPT|Cursor|Sync
 
 by Magshifter
 
-Standalone Windows development utility. A lightweight hotkey bridge between ChatGPT, Cursor, and Windows Terminal.
+Standalone Windows development utility. A lightweight clipboard bridge between ChatGPT desktop, Cursor, and Windows Terminal.
 
 This is not a numbered MAG Ecosystem project.
+
+Current repository directory: `MAG-Workflow-Bridge`. Future filesystem-safe name: `MAG-GPT-Cursor-Sync`. That directory has not been renamed yet.
 
 ## Purpose
 
@@ -12,22 +14,74 @@ This is not a numbered MAG Ecosystem project.
 |---|---|
 | ChatGPT → Cursor | Activate Cursor and paste the clipboard |
 | ChatGPT → Windows Terminal | Activate Windows Terminal and paste the clipboard |
-| Cursor → ChatGPT | Activate ChatGPT and paste the clipboard |
+| Cursor → ChatGPT | Activate ChatGPT, paste the clipboard, and Send |
+| ChatGPT → Cursor Agent | Clipboard → Cursor Agent → automatic submit |
+| ChatGPT → Cursor Terminal | Clipboard → Cursor integrated Terminal → automatic execute |
+
+Source for ChatGPT → Cursor actions is ChatGPT's native Copy. This product does not scrape ChatGPT messages.
+
+## Verified
+
+**Global hotkeys (paste only, never Enter):**
+
+| Hotkey | Target |
+|---|---|
+| Ctrl+Alt+C | Cursor |
+| Ctrl+Alt+T | Windows Terminal |
+| Ctrl+Alt+G | ChatGPT |
+
+**Cursor → ChatGPT**
+
+Cursor Copy Message → status bar **→ ChatGPT** → ChatGPT desktop activates → clipboard pasted → automatic Send.
+
+**ChatGPT → Cursor Agent**
+
+ChatGPT Copy → invoke Cursor Agent action → `composer.focusComposer` → paste → one Enter.
+
+Triggers:
+
+- Command Palette: `[MAG] GPT|Cursor|Sync: Send Clipboard to Cursor Agent`
+- Tray: **Cursor Agent** (`cursor://magshifter.mag-workflow-bridge/agent`)
+
+**ChatGPT → Cursor Terminal**
+
+ChatGPT Copy → invoke Cursor Terminal action → active Cursor integrated terminal → `sendText(..., true)`.
+
+Triggers:
+
+- Command Palette: `[MAG] GPT|Cursor|Sync: Execute Clipboard in Cursor Terminal`
+- Tray: **Cursor Terminal** (`cursor://magshifter.mag-workflow-bridge/terminal`)
+
+That is not Windows Terminal. `Ctrl+Alt+T` still pastes only into Windows Terminal.
+
+If no integrated terminal is active, the command warns and does nothing. Multi-line clipboard is not executed.
+
+`Ctrl+Alt+C` does not submit to Agent.
+
+## Planned
+
+ChatGPT-side buttons `[ Cursor Agent ] [ Cursor Terminal ]` inside the ChatGPT app are **not implemented**. ChatGPT is not patched. Browser extensions are not used.
 
 ## Safety model
 
 Global hotkeys never press Enter, Submit, or Send. They activate the target app and paste the clipboard. You review and submit or execute yourself.
 
-The Cursor status bar button **→ ChatGPT** is different: clicking it is explicit send intent. It pastes the clipboard into ChatGPT desktop and then submits that message.
+These actions are explicit execute intent:
+
+- **→ ChatGPT** (status bar)
+- Cursor Agent (Command Palette or tray)
+- Cursor Terminal (Command Palette or tray)
+
+If you want to edit first, use Copy and paste (`Ctrl+Alt+C` / `Ctrl+Alt+T` / `Ctrl+Alt+G`) instead.
 
 ## Requirement
 
-AutoHotkey v2 and Cursor (for the status bar button).
+AutoHotkey v2 and Cursor (for the status bar button and Cursor actions).
 
 ## Installation
 
 1. Install AutoHotkey v2.
-2. Clone or download MAG Workflow Bridge.
+2. Clone or download this repository.
 3. In PowerShell, from the repository folder, run:
 
 ```powershell
@@ -40,15 +94,7 @@ AutoHotkey v2 and Cursor (for the status bar button).
 
 `setup.ps1` packages the Cursor extension and installs it with Cursor CLI. It does not enable Windows startup and does not launch ChatGPT, Cursor, or Windows Terminal.
 
-The script stays loaded while AutoHotkey is running. Use **Exit** on the tray menu, or exit AutoHotkey, to stop the hotkeys.
-
-## Hotkeys
-
-| Hotkey | Target |
-|---|---|
-| Ctrl+Alt+C | Cursor |
-| Ctrl+Alt+T | Windows Terminal |
-| Ctrl+Alt+G | ChatGPT |
+The script stays loaded while AutoHotkey is running. Use **Exit** on the tray menu, or exit AutoHotkey, to stop the hotkeys and tray actions.
 
 ## Current targets
 
@@ -58,20 +104,20 @@ The script stays loaded while AutoHotkey is running. Use **Exit** on the tray me
 
 Browser ChatGPT is not supported in this version.
 
-If several windows of the same app are open, the most recently active matching window is used.
+If several windows of the same app are open, the most recently active matching window is used. Cursor URI actions are handled by the topmost Cursor window.
 
 ## Optional Windows startup
 
-Startup is optional, per-user, and off until you enable it. The bridge never turns it on by itself.
+Startup is optional, per-user, and off until you enable it. The product never turns it on by itself.
 
 1. Run `MAG-Workflow-Bridge.ahk`.
 2. Open the AutoHotkey tray menu.
 3. Choose **Enable startup**.
 4. To remove it, choose **Disable startup**.
 
-That creates or removes a single shortcut named `MAG Workflow Bridge.lnk` in the current user's Windows Startup folder (`shell:startup`). It does not install a service and does not write Registry Run keys. You can remove it at any time from the tray menu or by deleting that shortcut.
+That creates or removes a single shortcut named `MAG Workflow Bridge.lnk` in the current user's Windows Startup folder (`shell:startup`). The filename is kept so an existing Startup shortcut still matches. It does not install a service and does not write Registry Run keys.
 
-If you move or re-clone the repository, the existing shortcut still points at the old path. Disable startup, run the script from the new location, then Enable startup again. The bridge does not migrate the shortcut automatically.
+If you move or re-clone the repository, the existing shortcut still points at the old path. Disable startup, run the script from the new location, then Enable startup again.
 
 ## Cursor native button
 
@@ -85,14 +131,12 @@ To send a specific Agent response:
 
 If you want to edit before sending, use **Copy Message** and `Ctrl+Alt+G` (paste only), or paste manually.
 
-`Ctrl+Alt+G` still pastes only. Browser ChatGPT is not used.
-
-After `setup.ps1`, Cursor copies the extension (including `helper.ahk`) into its own extensions folder. The button does not depend on a junction back to this repository.
+After `setup.ps1`, Cursor copies the extension into its own extensions folder. The button does not depend on a junction back to this repository.
 
 ## Removal
 
 1. If startup is enabled, use the tray menu **Disable startup**.
-2. Use the tray menu **Exit** to stop MAG Workflow Bridge.
+2. Use the tray menu **Exit** to stop `[MAG] GPT|Cursor|Sync`.
 3. Uninstall the Cursor extension:
 
 ```powershell
@@ -103,9 +147,10 @@ Do not uninstall AutoHotkey unless you no longer need it. Do not delete the repo
 
 ## Known limitations
 
-- The target application must already be running. The bridge does not launch apps.
+- The target application must already be running for paste hotkeys. The product does not launch apps from those hotkeys.
 - Paste goes to whichever control already has focus inside the activated window.
 - Multiple matching windows may select the most recently active one.
+- Cursor URI actions target the topmost Cursor window, not every window.
 - Hotkeys can conflict with third-party software.
-- An elevated app may block interaction from an unelevated bridge (Windows privilege isolation).
+- An elevated app may block interaction from an unelevated script (Windows privilege isolation).
 - An existing Startup shortcut still points at the old script path if the repository is moved.

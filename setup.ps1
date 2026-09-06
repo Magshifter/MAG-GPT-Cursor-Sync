@@ -1,4 +1,4 @@
-# MAG Workflow Bridge setup
+# [MAG] GPT|Cursor|Sync setup
 # by Magshifter
 #
 # Installs the Cursor extension from this repository.
@@ -90,7 +90,7 @@ function Add-ZipFileEntry {
 }
 
 function New-LocalVsix([object]$Identity, [string]$OutputPath) {
-	$requiredFiles = @("package.json", "extension.js", "helper.ahk")
+	$requiredFiles = @("package.json", "extension.js", "helper.ahk", "agent-helper.ahk")
 	foreach ($fileName in $requiredFiles) {
 		$path = Join-Path $ExtensionDir $fileName
 		if (-not (Test-Path $path)) {
@@ -149,7 +149,7 @@ function New-LocalVsix([object]$Identity, [string]$OutputPath) {
 	}
 }
 
-Write-Step "MAG Workflow Bridge setup"
+Write-Step "[MAG] GPT|Cursor|Sync setup"
 Write-Step ("Repository: " + $RepoRoot)
 
 $ahkPath = Find-AutoHotkey
@@ -186,5 +186,5 @@ Write-Host "  1. Reload Cursor if it is already open."
 Write-Host "  2. Run MAG-Workflow-Bridge.ahk"
 Write-Host "  3. Optional: tray menu -> Enable startup"
 Write-Host ""
-Write-Host "Cursor Agent workflow: Copy Message, then click -> ChatGPT"
+Write-Host "Cursor -> ChatGPT: Copy Message, then click -> ChatGPT"
 Write-Host ("Uninstall extension: cursor --uninstall-extension " + $ExtensionId)

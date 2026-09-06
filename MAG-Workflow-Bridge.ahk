@@ -1,17 +1,20 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
-; MAG Workflow Bridge
+; [MAG] GPT|Cursor|Sync
 ; by Magshifter
 ;
 ; Activates a target window and pastes the current clipboard.
-; Never sends Enter, Submit, or Send.
-
+; Never sends Enter, Submit, or Send from global hotkeys.
+;
 ; Ctrl+Alt+C -> Cursor
 ; Ctrl+Alt+T -> Windows Terminal
 ; Ctrl+Alt+G -> ChatGPT
+;
+; Tray Cursor Agent / Cursor Terminal trigger Cursor URI handlers.
+; They do not duplicate Agent paste or terminal sendText logic.
 
-A_IconTip := "MAG Workflow Bridge"
+A_IconTip := "[MAG] GPT|Cursor|Sync"
 InitTray()
 
 ^!c:: PasteToTarget("Cursor.exe", "Cursor")
@@ -38,6 +41,15 @@ PasteToTarget(exeName, displayName)
     Send "^v"
 }
 
+TriggerCursorCommand(actionPath)
+{
+    uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
+    try
+        Run uri
+    catch
+        Notify("Could not trigger Cursor (" actionPath ").")
+}
+
 StartupShortcutPath()
 {
     return A_Startup "\MAG Workflow Bridge.lnk"
@@ -51,6 +63,9 @@ StartupIsEnabled()
 InitTray()
 {
     A_TrayMenu.Delete()
+    A_TrayMenu.Add("Cursor Agent", (*) => TriggerCursorCommand("agent"))
+    A_TrayMenu.Add("Cursor Terminal", (*) => TriggerCursorCommand("terminal"))
+    A_TrayMenu.Add()
     A_TrayMenu.Add("Enable startup", EnableStartup)
     A_TrayMenu.Add("Disable startup", DisableStartup)
     A_TrayMenu.Add()
@@ -77,7 +92,7 @@ EnableStartup(*)
     linkPath := StartupShortcutPath()
     SplitPath A_LineFile, , &bridgeDir
     args := '"' A_LineFile '"'
-    FileCreateShortcut(A_AhkPath, linkPath, bridgeDir, args, "MAG Workflow Bridge")
+    FileCreateShortcut(A_AhkPath, linkPath, bridgeDir, args, "[MAG] GPT|Cursor|Sync")
     RefreshTray()
     Notify("Startup enabled.")
 }

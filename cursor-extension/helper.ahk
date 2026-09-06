@@ -2,7 +2,7 @@
 #SingleInstance Force
 #NoTrayIcon
 
-; MAG Workflow Bridge — Cursor one-shot helper
+; [MAG] GPT|Cursor|Sync — Cursor one-shot helper
 ; by Magshifter
 ;
 ; Activates ChatGPT, pastes the current clipboard, then submits.
