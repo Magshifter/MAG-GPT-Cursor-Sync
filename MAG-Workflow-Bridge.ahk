@@ -29,6 +29,7 @@ lastWinY := ""
 lastWinW := ""
 lastWinH := ""
 stableTicks := 0
+statusBarMenu := 0
 
 TraySetIcon(A_ScriptDir "\assets\MAG-GPT-Cursor-Sync.ico")
 InitTray()
@@ -59,6 +60,14 @@ PasteToTarget(exeName, displayName)
     Send "^v"
 }
 
+DispatchCursorUri(actionPath)
+{
+    uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
+    launched := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", uri, "Ptr", 0, "Ptr", 0, "Int", 1, "Ptr")
+    if launched <= 32
+        Notify("Could not trigger Cursor (" actionPath ").")
+}
+
 TriggerCursorCommand(actionPath)
 {
     if Trim(A_Clipboard, " `t`r`n") = ""
@@ -66,10 +75,55 @@ TriggerCursorCommand(actionPath)
         Notify("Clipboard is empty.")
         return
     }
-    uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
-    launched := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", uri, "Ptr", 0, "Ptr", 0, "Int", 1, "Ptr")
-    if launched <= 32
-        Notify("Could not trigger Cursor (" actionPath ").")
+    DispatchCursorUri(actionPath)
+}
+
+StatusBarSettingsPath()
+{
+    return EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync\settings.ini"
+}
+
+NormalizeStatusBarPosition(value)
+{
+    position := StrLower(Trim(value))
+    if position = "left" || position = "center"
+        return position
+    return "center"
+}
+
+ReadStatusBarPosition()
+{
+    path := StatusBarSettingsPath()
+    if !FileExist(path)
+        return "center"
+    return NormalizeStatusBarPosition(IniRead(path, "StatusBar", "Position", "center"))
+}
+
+WriteStatusBarPosition(position)
+{
+    dir := EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync"
+    if !DirExist(dir)
+        DirCreate(dir)
+    IniWrite(NormalizeStatusBarPosition(position), StatusBarSettingsPath(), "StatusBar", "Position")
+}
+
+UpdateStatusBarCheckmarks(position)
+{
+    global statusBarMenu
+    statusBarMenu.Uncheck("Left")
+    statusBarMenu.Uncheck("Center")
+    if position = "left"
+        statusBarMenu.Check("Left")
+    else
+        statusBarMenu.Check("Center")
+}
+
+SetStatusBarPosition(position)
+{
+    normalized := NormalizeStatusBarPosition(position)
+    WriteStatusBarPosition(normalized)
+    UpdateStatusBarCheckmarks(normalized)
+    DispatchCursorUri("statusbar-" normalized)
 }
 
 InitCompanionBar()
@@ -239,12 +293,19 @@ StartupIsEnabled()
 
 InitTray()
 {
+    global statusBarMenu
     A_TrayMenu.Delete()
     A_TrayMenu.Add("Cursor Agent", (*) => TriggerCursorCommand("agent"))
     A_TrayMenu.Add("Cursor Terminal", (*) => TriggerCursorCommand("terminal"))
     A_TrayMenu.Add()
     A_TrayMenu.Add("ChatGPT action bar", ToggleActionBar)
     A_TrayMenu.Check("ChatGPT action bar")
+    A_TrayMenu.Add()
+    statusBarMenu := Menu()
+    statusBarMenu.Add("Left", (*) => SetStatusBarPosition("left"))
+    statusBarMenu.Add("Center", (*) => SetStatusBarPosition("center"))
+    A_TrayMenu.Add("Status Bar Position", statusBarMenu)
+    UpdateStatusBarCheckmarks(ReadStatusBarPosition())
     A_TrayMenu.Add()
     A_TrayMenu.Add("Enable startup", EnableStartup)
     A_TrayMenu.Add("Disable startup", DisableStartup)

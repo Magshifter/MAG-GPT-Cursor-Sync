@@ -26,6 +26,14 @@
 				"title": "[MAG] GPT|Cursor|Sync: Send Last Terminal Command + Output to ChatGPT"
 			},
 			{
+				"command": "magWorkflowBridge.sendLast2TerminalOutputsToChatGPT",
+				"title": "[MAG] GPT|Cursor|Sync: Send Last 2 Terminal Commands + Output to ChatGPT"
+			},
+			{
+				"command": "magWorkflowBridge.sendLast3TerminalOutputsToChatGPT",
+				"title": "[MAG] GPT|Cursor|Sync: Send Last 3 Terminal Commands + Output to ChatGPT"
+			},
+			{
 				"command": "magWorkflowBridge.sendToCursorAgent",
 				"title": "[MAG] GPT|Cursor|Sync: Send Clipboard to Cursor Agent"
 			},

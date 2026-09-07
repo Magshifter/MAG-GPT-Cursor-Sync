@@ -5,9 +5,57 @@ const vscode = require("vscode");
 
 const SEND_TO_CHATGPT = "magWorkflowBridge.sendToChatGPT";
 const SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT = "magWorkflowBridge.sendLastTerminalOutputToChatGPT";
+const SEND_LAST_2_TERMINAL_OUTPUTS_TO_CHATGPT = "magWorkflowBridge.sendLast2TerminalOutputsToChatGPT";
+const SEND_LAST_3_TERMINAL_OUTPUTS_TO_CHATGPT = "magWorkflowBridge.sendLast3TerminalOutputsToChatGPT";
 const SEND_TO_AGENT = "magWorkflowBridge.sendToCursorAgent";
 const SEND_TO_TERMINAL = "magWorkflowBridge.sendToCursorTerminal";
 const COPY_LAST_COMMAND_AND_OUTPUT = "workbench.action.terminal.copyLastCommandAndLastCommandOutput";
+const STATUS_BAR_POSITION_KEY = "magWorkflowBridge.statusBarPosition";
+const DEFAULT_STATUS_BAR_POSITION = "center";
+const MAG_STATUS_BAR_COLOR = "#6E2323";
+
+const STATUS_BAR_LAYOUTS = {
+	left: {
+		alignment: vscode.StatusBarAlignment.Left,
+		priorities: [10004, 10003, 10002, 10001],
+	},
+	center: {
+		alignment: vscode.StatusBarAlignment.Left,
+		priorities: [4, 3, 2, 1],
+	},
+};
+
+const MAG_STATUS_BAR_SPECS = [
+	{
+		text: "TER → GPT",
+		tooltip: "Send last terminal command + output to ChatGPT",
+		command: SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT,
+	},
+	{
+		text: "2",
+		tooltip: "Send last 2 terminal commands + output to ChatGPT",
+		command: SEND_LAST_2_TERMINAL_OUTPUTS_TO_CHATGPT,
+	},
+	{
+		text: "3",
+		tooltip: "Send last 3 terminal commands + output to ChatGPT",
+		command: SEND_LAST_3_TERMINAL_OUTPUTS_TO_CHATGPT,
+	},
+	{
+		text: "AGT → GPT",
+		tooltip: "Send clipboard to ChatGPT",
+		command: SEND_TO_CHATGPT,
+	},
+];
+
+/** @type {Map<object, { commandLine: string, output: string, exitCode: number | undefined }[]>} */
+const terminalHistory = new Map();
+
+/** @type {Map<object, { terminal: object, chunks: string[], streamDone: Promise<void> }>} */
+const pendingExecutions = new Map();
+
+/** @type {import("vscode").StatusBarItem[]} */
+let magStatusBarItems = [];
 
 function delay(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,6 +91,105 @@ function runHelper(ahkPath, helperPath) {
 			resolve(code === null ? 1 : code);
 		});
 	});
+}
+
+/**
+ * Smallest safe cleanup of terminal formatting/control sequences for ChatGPT text.
+ * Preserves human-readable output and line breaks; does not reinterpret command semantics.
+ */
+function normalizeTerminalOutput(text) {
+	return String(text || "")
+		.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+		.replace(/\u001b\[[0-9;?]*[ -\/]*[@-~]/g, "")
+		.replace(/\u001b[@-Z\\-_]/g, "")
+		.replace(/\u0000/g, "")
+		.replace(/\r\n/g, "\n")
+		.replace(/\r/g, "\n");
+}
+
+function getHistory(terminal) {
+	return terminalHistory.get(terminal) || [];
+}
+
+function pushCompletedExecution(terminal, entry) {
+	const history = terminalHistory.get(terminal) || [];
+	history.push(entry);
+	while (history.length > 3) {
+		history.shift();
+	}
+	terminalHistory.set(terminal, history);
+}
+
+function formatExecutionsMessage(entries) {
+	return entries
+		.map((entry, index) => {
+			const command = entry.commandLine || "";
+			const output = entry.output || "";
+			return `Command ${index + 1}:\n${command}\n\nOutput:\n${output}`;
+		})
+		.join("\n\n");
+}
+
+function beginShellExecutionCapture(event) {
+	const terminal = event.terminal;
+	const execution = event.execution;
+	const chunks = [];
+	const stream = execution.read();
+	const streamDone = (async () => {
+		try {
+			for await (const data of stream) {
+				chunks.push(data);
+			}
+		} catch {
+			// Capture must not interfere with normal terminal execution.
+		}
+	})();
+
+	pendingExecutions.set(execution, {
+		terminal,
+		chunks,
+		streamDone,
+	});
+}
+
+async function completeShellExecutionCapture(event) {
+	const terminal = event.terminal;
+	const execution = event.execution;
+	const pending = pendingExecutions.get(execution);
+	if (!pending) {
+		return;
+	}
+
+	pendingExecutions.delete(execution);
+
+	try {
+		await pending.streamDone;
+	} catch {
+		// Incomplete streams are not stored as completed history.
+		return;
+	}
+
+	const commandLine =
+		(execution.commandLine && typeof execution.commandLine.value === "string"
+			? execution.commandLine.value
+			: "") || "";
+	const output = normalizeTerminalOutput(pending.chunks.join(""));
+	const exitCode = typeof event.exitCode === "number" ? event.exitCode : undefined;
+
+	pushCompletedExecution(terminal, {
+		commandLine,
+		output,
+		exitCode,
+	});
+}
+
+function clearTerminalState(terminal) {
+	terminalHistory.delete(terminal);
+	for (const [execution, pending] of pendingExecutions.entries()) {
+		if (pending.terminal === terminal) {
+			pendingExecutions.delete(execution);
+		}
+	}
 }
 
 async function sendToChatGPT(context) {
@@ -106,6 +253,27 @@ async function sendLastTerminalOutputToChatGPT(context) {
 	await sendToChatGPT(context);
 }
 
+async function sendLastNTerminalOutputsToChatGPT(context, count) {
+	const terminal = vscode.window.activeTerminal;
+	if (!terminal) {
+		void vscode.window.showWarningMessage("No Cursor integrated terminal is active.");
+		return;
+	}
+
+	const history = getHistory(terminal);
+	if (history.length < count) {
+		void vscode.window.showWarningMessage(
+			`Need ${count} completed terminal command(s) in the active Terminal. Captured: ${history.length}.`
+		);
+		return;
+	}
+
+	const entries = history.slice(-count);
+	const message = formatExecutionsMessage(entries);
+	await vscode.env.clipboard.writeText(message);
+	await sendToChatGPT(context);
+}
+
 async function sendToCursorAgent(context) {
 	const text = await vscode.env.clipboard.readText();
 	if (!text) {
@@ -163,7 +331,51 @@ async function sendToCursorTerminal() {
 	terminal.sendText(payload, true);
 }
 
-function handleExternalUri(uri) {
+function normalizeStatusBarPosition(value) {
+	if (value === "left" || value === "center") {
+		return value;
+	}
+	return DEFAULT_STATUS_BAR_POSITION;
+}
+
+async function initializeStatusBarPosition(context) {
+	const stored = context.globalState.get(STATUS_BAR_POSITION_KEY);
+	const normalized = normalizeStatusBarPosition(stored);
+	if (stored !== normalized) {
+		await context.globalState.update(STATUS_BAR_POSITION_KEY, normalized);
+	}
+	createMagStatusBarItems(normalized);
+}
+
+function disposeMagStatusBarItems() {
+	for (const item of magStatusBarItems) {
+		item.dispose();
+	}
+	magStatusBarItems = [];
+}
+
+function createMagStatusBarItems(position) {
+	disposeMagStatusBarItems();
+	const layout = STATUS_BAR_LAYOUTS[normalizeStatusBarPosition(position)];
+	for (let index = 0; index < MAG_STATUS_BAR_SPECS.length; index += 1) {
+		const spec = MAG_STATUS_BAR_SPECS[index];
+		const item = vscode.window.createStatusBarItem(layout.alignment, layout.priorities[index]);
+		item.text = spec.text;
+		item.tooltip = spec.tooltip;
+		item.color = MAG_STATUS_BAR_COLOR;
+		item.command = spec.command;
+		item.show();
+		magStatusBarItems.push(item);
+	}
+}
+
+async function applyStatusBarPosition(context, position) {
+	const normalized = normalizeStatusBarPosition(position);
+	await context.globalState.update(STATUS_BAR_POSITION_KEY, normalized);
+	createMagStatusBarItems(normalized);
+}
+
+function handleExternalUri(context, uri) {
 	const action = String(uri.path || "").replace(/^\/+|\/+$/g, "").toLowerCase();
 	if (action === "agent") {
 		return vscode.commands.executeCommand(SEND_TO_AGENT);
@@ -171,34 +383,42 @@ function handleExternalUri(uri) {
 	if (action === "terminal") {
 		return vscode.commands.executeCommand(SEND_TO_TERMINAL);
 	}
+	if (action === "statusbar-left") {
+		return applyStatusBarPosition(context, "left");
+	}
+	if (action === "statusbar-center") {
+		return applyStatusBarPosition(context, "center");
+	}
 	void vscode.window.showWarningMessage("[MAG] GPT|Cursor|Sync: unknown Cursor URI action.");
 }
 
 function activate(context) {
-	const terminalItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	terminalItem.text = "TER → GPT";
-	terminalItem.tooltip = "Send last terminal command + output to ChatGPT";
-	terminalItem.color = "#6E2323";
-	terminalItem.command = SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT;
-	terminalItem.show();
-	context.subscriptions.push(terminalItem);
-
-	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
-	item.text = "AGT → GPT";
-	item.tooltip = "Send clipboard to ChatGPT";
-	item.color = "#6E2323";
-	item.command = SEND_TO_CHATGPT;
-	item.show();
-	context.subscriptions.push(item);
+	void initializeStatusBarPosition(context);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(SEND_TO_CHATGPT, () => sendToChatGPT(context)),
 		vscode.commands.registerCommand(SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT, () =>
 			sendLastTerminalOutputToChatGPT(context)
 		),
+		vscode.commands.registerCommand(SEND_LAST_2_TERMINAL_OUTPUTS_TO_CHATGPT, () =>
+			sendLastNTerminalOutputsToChatGPT(context, 2)
+		),
+		vscode.commands.registerCommand(SEND_LAST_3_TERMINAL_OUTPUTS_TO_CHATGPT, () =>
+			sendLastNTerminalOutputsToChatGPT(context, 3)
+		),
 		vscode.commands.registerCommand(SEND_TO_AGENT, () => sendToCursorAgent(context)),
 		vscode.commands.registerCommand(SEND_TO_TERMINAL, () => sendToCursorTerminal()),
-		vscode.window.registerUriHandler({ handleUri: handleExternalUri })
+		vscode.window.registerUriHandler({ handleUri: (uri) => handleExternalUri(context, uri) }),
+		{ dispose: disposeMagStatusBarItems },
+		vscode.window.onDidStartTerminalShellExecution((event) => {
+			beginShellExecutionCapture(event);
+		}),
+		vscode.window.onDidEndTerminalShellExecution((event) => {
+			void completeShellExecutionCapture(event);
+		}),
+		vscode.window.onDidCloseTerminal((terminal) => {
+			clearTerminalState(terminal);
+		})
 	);
 }
 
