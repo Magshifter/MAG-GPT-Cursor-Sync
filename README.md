@@ -186,3 +186,28 @@ Do not uninstall AutoHotkey unless you no longer need it. Do not delete the repo
 - Hotkeys can conflict with third-party software.
 - An elevated app may block interaction from an unelevated script (Windows privilege isolation).
 - An existing Startup shortcut still points at the old script path if the repository is moved.
+
+## Project page
+
+The official resource page for `[MAG] GPT|Cursor|Sync` is available at:
+
+https://magshifter.com/resources/chatgpt-vs-cursor-synchronization-tool.8/
+
+The resource page contains the project description, usage information, updates, and related information.
+
+## Support, discussion and feedback
+
+Questions, bug reports, suggestions, feedback, and general discussion are welcome in the dedicated forum thread:
+
+https://magshifter.com/threads/chatgpt-vs-cursor-synchronization-tool.18/
+
+If you encounter a problem, please include:
+
+- what action you were using;
+- what you expected to happen;
+- what actually happened;
+- your Cursor version;
+- your PowerShell version when the issue involves Terminal integration;
+- any visible warning or error message.
+
+This makes troubleshooting much easier.
