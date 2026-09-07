@@ -2,7 +2,7 @@
 	"name": "mag-workflow-bridge",
 	"displayName": "[MAG] GPT|Cursor|Sync",
 	"description": "Clipboard bridge between ChatGPT desktop, Cursor Agent, and Cursor integrated Terminal.",
-	"version": "0.0.1",
+	"version": "1.0.0",
 	"publisher": "magshifter",
 	"engines": {
 		"vscode": "^1.75.0"
@@ -20,6 +20,10 @@
 			{
 				"command": "magWorkflowBridge.sendToChatGPT",
 				"title": "[MAG] GPT|Cursor|Sync: Paste into ChatGPT"
+			},
+			{
+				"command": "magWorkflowBridge.sendLastTerminalOutputToChatGPT",
+				"title": "[MAG] GPT|Cursor|Sync: Send Last Terminal Command + Output to ChatGPT"
 			},
 			{
 				"command": "magWorkflowBridge.sendToCursorAgent",

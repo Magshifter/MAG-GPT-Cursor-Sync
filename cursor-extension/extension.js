@@ -4,8 +4,10 @@ const { spawn } = require("child_process");
 const vscode = require("vscode");
 
 const SEND_TO_CHATGPT = "magWorkflowBridge.sendToChatGPT";
+const SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT = "magWorkflowBridge.sendLastTerminalOutputToChatGPT";
 const SEND_TO_AGENT = "magWorkflowBridge.sendToCursorAgent";
 const SEND_TO_TERMINAL = "magWorkflowBridge.sendToCursorTerminal";
+const COPY_LAST_COMMAND_AND_OUTPUT = "workbench.action.terminal.copyLastCommandAndLastCommandOutput";
 
 function delay(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,6 +71,39 @@ async function sendToChatGPT(context) {
 		const message = error instanceof Error ? error.message : String(error);
 		void vscode.window.showWarningMessage(message);
 	}
+}
+
+async function sendLastTerminalOutputToChatGPT(context) {
+	const terminal = vscode.window.activeTerminal;
+	if (!terminal) {
+		void vscode.window.showWarningMessage("No Cursor integrated terminal is active.");
+		return;
+	}
+
+	terminal.show(false);
+
+	// Sentinel so we never send pre-existing clipboard if the terminal copy fails.
+	const marker = `__MAG_WF_BRIDGE_TERM_${Date.now()}__`;
+	await vscode.env.clipboard.writeText(marker);
+
+	try {
+		await vscode.commands.executeCommand(COPY_LAST_COMMAND_AND_OUTPUT);
+	} catch (error) {
+		await vscode.env.clipboard.writeText("");
+		void vscode.window.showWarningMessage("Could not copy last terminal command and output.");
+		return;
+	}
+
+	const text = await vscode.env.clipboard.readText();
+	if (!text || text === marker) {
+		await vscode.env.clipboard.writeText("");
+		void vscode.window.showWarningMessage(
+			"Could not obtain last terminal command and output. Shell integration may be unavailable."
+		);
+		return;
+	}
+
+	await sendToChatGPT(context);
 }
 
 async function sendToCursorAgent(context) {
@@ -140,8 +175,16 @@ function handleExternalUri(uri) {
 }
 
 function activate(context) {
-	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	item.text = "→ ChatGPT";
+	const terminalItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	terminalItem.text = "TER → GPT";
+	terminalItem.tooltip = "Send last terminal command + output to ChatGPT";
+	terminalItem.color = "#6E2323";
+	terminalItem.command = SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT;
+	terminalItem.show();
+	context.subscriptions.push(terminalItem);
+
+	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+	item.text = "AGT → GPT";
 	item.tooltip = "Send clipboard to ChatGPT";
 	item.color = "#6E2323";
 	item.command = SEND_TO_CHATGPT;
@@ -150,6 +193,9 @@ function activate(context) {
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(SEND_TO_CHATGPT, () => sendToChatGPT(context)),
+		vscode.commands.registerCommand(SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT, () =>
+			sendLastTerminalOutputToChatGPT(context)
+		),
 		vscode.commands.registerCommand(SEND_TO_AGENT, () => sendToCursorAgent(context)),
 		vscode.commands.registerCommand(SEND_TO_TERMINAL, () => sendToCursorTerminal()),
 		vscode.window.registerUriHandler({ handleUri: handleExternalUri })
