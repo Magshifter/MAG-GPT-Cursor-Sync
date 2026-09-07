@@ -11,8 +11,8 @@
 ; Ctrl+Alt+T -> Windows Terminal
 ; Ctrl+Alt+G -> ChatGPT
 ;
-; Tray and ChatGPT companion bar trigger Cursor URI handlers.
-; They do not duplicate Agent paste or terminal sendText logic.
+; Companion TER | AGT and tray Cursor Agent / Cursor Terminal
+; use the current clipboard, then the Cursor URI.
 
 A_IconTip := "[MAG] GPT|Cursor|Sync"
 
@@ -24,6 +24,11 @@ companionW := 0
 companionH := 0
 companionLastX := ""
 companionLastY := ""
+lastWinX := ""
+lastWinY := ""
+lastWinW := ""
+lastWinH := ""
+stableTicks := 0
 
 InitTray()
 InitCompanionBar()
@@ -55,74 +60,79 @@ PasteToTarget(exeName, displayName)
 
 TriggerCursorCommand(actionPath)
 {
-    uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
-    try
-        Run uri
-    catch
-        Notify("Could not trigger Cursor (" actionPath ").")
-}
-
-CompanionClick(actionPath, *)
-{
     if Trim(A_Clipboard, " `t`r`n") = ""
     {
         Notify("Clipboard is empty.")
         return
     }
-    TriggerCursorCommand(actionPath)
+    uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
+    launched := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", uri, "Ptr", 0, "Ptr", 0, "Int", 1, "Ptr")
+    if launched <= 32
+        Notify("Could not trigger Cursor (" actionPath ").")
 }
 
 InitCompanionBar()
 {
     global companionGui, companionW, companionH
-    companionGui := Gui("+AlwaysOnTop -Caption +ToolWindow -SysMenu +E0x08000000")
+    ; WS_EX_NOACTIVATE (E0x08000000): do not steal ChatGPT focus on click.
+    ; Do not use WS_EX_TRANSPARENT (E0x20) or TransColor: keyed pixels are
+    ; HTTRANSPARENT and the click falls through to ChatGPT (Send/composer).
+    companionGui := Gui("+AlwaysOnTop -Caption -Border +ToolWindow -SysMenu +E0x08000000")
     companionGui.BackColor := "F3F3F3"
-    companionGui.MarginX := 8
-    companionGui.MarginY := 6
+    companionGui.MarginX := 0
+    companionGui.MarginY := 0
     companionGui.SetFont("s9", "Segoe UI")
-    btnAgent := companionGui.Add("Button", "w118 h28", "Cursor Agent")
-    btnTerminal := companionGui.Add("Button", "x+8 yp w130 h28", "Cursor Terminal")
-    btnAgent.OnEvent("Click", CompanionClick.Bind("agent"))
-    btnTerminal.OnEvent("Click", CompanionClick.Bind("terminal"))
-    try btnAgent.ToolTip := "Send clipboard to Cursor Agent"
-    try btnTerminal.ToolTip := "Execute clipboard in Cursor Terminal"
+    ter := companionGui.Add("Button", "x0 y0 w46 h28", "TER")
+    agt := companionGui.Add("Button", "x+6 yp w46 h28", "AGT")
+    try ter.ToolTip := "Execute current clipboard in Cursor Terminal"
+    try agt.ToolTip := "Send current clipboard to Cursor Agent"
+    ter.OnEvent("Click", (*) => TriggerCursorCommand("terminal"))
+    agt.OnEvent("Click", (*) => TriggerCursorCommand("agent"))
     companionGui.Show("Hide")
     companionGui.GetPos(,, &companionW, &companionH)
 }
 
 HideCompanion()
 {
-    global companionVisible, companionTarget, companionGui, companionLastX, companionLastY
+    global companionVisible, companionGui, companionLastX, companionLastY
     if companionVisible
     {
         companionGui.Hide()
         companionVisible := false
     }
-    companionTarget := 0
     companionLastX := ""
     companionLastY := ""
 }
 
-PositionCompanion(hwnd)
+HideEverything()
+{
+    global companionTarget, lastWinX, lastWinY, lastWinW, lastWinH, stableTicks
+    HideCompanion()
+    companionTarget := 0
+    lastWinX := ""
+    lastWinY := ""
+    lastWinW := ""
+    lastWinH := ""
+    stableTicks := 0
+}
+
+IsMagGui(hwnd)
+{
+    global companionGui
+    return hwnd = companionGui.Hwnd
+}
+
+ShowCompanionAt(hwnd)
 {
     global companionGui, companionW, companionH, companionVisible, companionLastX, companionLastY
     WinGetPos(&cx, &cy, &cw, &ch, hwnd)
     GetWorkAreaForPoint(cx + cw // 2, cy + ch // 2, &workL, &workT, &workR, &workB)
-
-    x := cx + Max(0, (cw - companionW) // 2)
-    y := cy - companionH - 4
-
-    if y < workT
-    {
-        x := cx + cw + 4
-        y := cy
-        if x + companionW > workR
-        {
-            x := Min(cx + cw - companionW - 8, workR - companionW)
-            y := Max(cy + 8, workT)
-        }
-    }
-
+    rightGap := 72
+    bottomGap := Max(148, Min(176, ch // 6))
+    x := cx + cw - companionW - rightGap
+    y := cy + ch - companionH - bottomGap
+    x := Max(cx + 8, Min(x, cx + cw - companionW - 8))
+    y := Max(cy + 8, Min(y, cy + ch - companionH - 8))
     x := Max(workL, Min(x, workR - companionW))
     y := Max(workT, Min(y, workB - companionH))
     if !companionVisible || companionLastX != x || companionLastY != y
@@ -131,6 +141,7 @@ PositionCompanion(hwnd)
         companionLastX := x
         companionLastY := y
     }
+    companionVisible := true
 }
 
 GetWorkAreaForPoint(px, py, &workL, &workT, &workR, &workB)
@@ -149,31 +160,57 @@ GetWorkAreaForPoint(px, py, &workL, &workT, &workR, &workB)
 
 UpdateCompanionBar()
 {
-    global actionBarEnabled, companionVisible, companionTarget, companionGui
+    global actionBarEnabled, companionTarget, lastWinX, lastWinY, lastWinW, lastWinH, stableTicks
     if !actionBarEnabled
     {
-        HideCompanion()
+        HideEverything()
         return
     }
 
     if !WinExist("ahk_exe ChatGPT.exe")
     {
-        HideCompanion()
+        HideEverything()
         return
     }
 
     active := WinExist("A")
     chatgpt := WinActive("ahk_exe ChatGPT.exe")
     if chatgpt
-        companionTarget := chatgpt
-    else if active != companionGui.Hwnd || !companionTarget || !WinExist(companionTarget)
+        companionTarget := DllCall("user32\GetAncestor", "ptr", chatgpt, "uint", 2, "ptr") || chatgpt
+    else if !IsMagGui(active) || !companionTarget || !WinExist(companionTarget)
     {
-        HideCompanion()
+        HideEverything()
         return
     }
 
-    PositionCompanion(companionTarget)
-    companionVisible := true
+    WinGetPos(&cx, &cy, &cw, &ch, companionTarget)
+    if lastWinX = ""
+    {
+        lastWinX := cx
+        lastWinY := cy
+        lastWinW := cw
+        lastWinH := ch
+        stableTicks := 3
+        ShowCompanionAt(companionTarget)
+        return
+    }
+    if cx != lastWinX || cy != lastWinY || cw != lastWinW || ch != lastWinH
+    {
+        lastWinX := cx
+        lastWinY := cy
+        lastWinW := cw
+        lastWinH := ch
+        stableTicks := 0
+        HideCompanion()
+        return
+    }
+    if stableTicks < 3
+    {
+        stableTicks += 1
+        HideCompanion()
+        return
+    }
+    ShowCompanionAt(companionTarget)
 }
 
 ToggleActionBar(*)
@@ -185,7 +222,7 @@ ToggleActionBar(*)
     else
     {
         A_TrayMenu.Uncheck("ChatGPT action bar")
-        HideCompanion()
+        HideEverything()
     }
 }
 

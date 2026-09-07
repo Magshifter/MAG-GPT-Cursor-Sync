@@ -15,10 +15,10 @@ Current repository directory: `MAG-Workflow-Bridge`. Future filesystem-safe name
 | ChatGPT → Cursor | Activate Cursor and paste the clipboard |
 | ChatGPT → Windows Terminal | Activate Windows Terminal and paste the clipboard |
 | Cursor → ChatGPT | Activate ChatGPT, paste the clipboard, and Send |
-| ChatGPT → Cursor Agent | Clipboard → Cursor Agent → automatic submit |
-| ChatGPT → Cursor Terminal | Clipboard → Cursor integrated Terminal → automatic execute |
+| ChatGPT → Cursor Agent | Native Copy, then companion **AGT** or tray **Cursor Agent** |
+| ChatGPT → Cursor Terminal | Native Copy, then companion **TER** or tray **Cursor Terminal** (single- or multi-line) |
 
-Source for ChatGPT → Cursor actions is ChatGPT's native Copy. This product does not scrape ChatGPT messages.
+Companion TER/AGT and tray Agent/Terminal use the **current clipboard**. They do not copy ChatGPT for you. This product does not scrape ChatGPT messages.
 
 ## Verified
 
@@ -36,58 +36,62 @@ Cursor Copy Message → status bar **→ ChatGPT** → ChatGPT desktop activates
 
 **ChatGPT → Cursor Agent**
 
-ChatGPT Copy → invoke Cursor Agent action → `composer.focusComposer` → paste → one Enter.
+Native ChatGPT Copy → companion **AGT** or tray **Cursor Agent** → current clipboard → Cursor Agent → `composer.focusComposer` → paste → one Enter.
 
 Triggers:
 
-- ChatGPT companion action bar: **Cursor Agent**
-- Tray: **Cursor Agent**
+- ChatGPT companion **AGT** (current clipboard)
+- Tray: **Cursor Agent** (current clipboard)
 - Command Palette: `[MAG] GPT|Cursor|Sync: Send Clipboard to Cursor Agent`
 
 URI: `cursor://magshifter.mag-workflow-bridge/agent`
 
 **ChatGPT → Cursor Terminal**
 
-ChatGPT Copy → invoke Cursor Terminal action → active Cursor integrated terminal → `sendText(..., true)`.
+Native ChatGPT Copy → companion **TER** or tray **Cursor Terminal** → current clipboard (one or many lines) → active Cursor integrated terminal → `sendText(..., true)`.
+
+The clipboard block is sent as-is to the shell. TER does not parse, split, or reorder commands. Single-line and multi-line content are both accepted.
 
 Triggers:
 
-- ChatGPT companion action bar: **Cursor Terminal**
-- Tray: **Cursor Terminal**
+- ChatGPT companion **TER** (current clipboard)
+- Tray: **Cursor Terminal** (current clipboard)
 - Command Palette: `[MAG] GPT|Cursor|Sync: Execute Clipboard in Cursor Terminal`
 
 URI: `cursor://magshifter.mag-workflow-bridge/terminal`
 
-That is not Windows Terminal. `Ctrl+Alt+T` still pastes only into Windows Terminal.
+That is not Windows Terminal. `Ctrl+Alt+T` pastes only into Windows Terminal and does **not** execute.
 
-If no integrated terminal is active, the command warns and does nothing. Multi-line clipboard is not executed.
+If no Cursor integrated terminal is active, the command warns and does nothing. TER does not create a terminal automatically.
 
 `Ctrl+Alt+C` does not submit to Agent.
 
 ## ChatGPT companion action bar
 
-This is a MAG-controlled Windows companion UI. It is **not** a native ChatGPT plugin. It does not patch, inject, or modify ChatGPT.
+This is a MAG-controlled Windows companion UI. It is **not** a native ChatGPT plugin. It does not patch, inject, or modify ChatGPT. It does not use UI Automation and does not click ChatGPT Copy for you.
 
-While ChatGPT desktop (`ChatGPT.exe`) is active, a small bar with **Cursor Agent** and **Cursor Terminal** appears next to that window. It hides when ChatGPT is not active. Browser ChatGPT is not supported.
+While ChatGPT desktop is active, one stable **TER | AGT** pair sits near the lower-right composer area. It hides while the ChatGPT window is moving or resizing, then reappears in the final position. It hides when ChatGPT is not active. Browser ChatGPT is not supported.
+
+The companion does **not** automatically copy ChatGPT responses. You select exact content with ChatGPT's native Copy. Empty clipboard is refused with `Clipboard is empty.`
 
 **ChatGPT → Cursor Agent**
 
-1. Copy the desired ChatGPT text normally.
-2. Click **Cursor Agent** on the companion action bar.
+1. Use ChatGPT native Copy on the desired Plain Text/prompt.
+2. Click **AGT** (or tray **Cursor Agent**).
 3. Cursor activates.
-4. Agent receives the clipboard.
-5. The prompt is submitted automatically.
+4. Agent receives the current clipboard.
+5. The prompt submits automatically.
 
 **ChatGPT → Cursor Terminal**
 
-1. Copy a single-line command normally.
-2. Click **Cursor Terminal**.
+1. Use ChatGPT native Copy on the desired command or multi-line terminal block.
+2. Click **TER** (or tray **Cursor Terminal**).
 3. Cursor activates.
-4. The active Cursor integrated terminal executes it automatically.
+4. The active Cursor integrated terminal receives the clipboard block and the shell executes it.
 
-Tray **Cursor Agent** / **Cursor Terminal** remain as a fallback. Tray **ChatGPT action bar** enables or disables the companion for the current session (default enabled; not persisted). Existing Startup still launches this same script, so the companion is available after login if startup is enabled.
+TER supports single-line and multi-line clipboard content. It does not create a terminal, does not parse commands, and does not strip ChatGPT content. `Ctrl+Alt+T` remains paste-only into Windows Terminal and is a separate action.
 
-Native buttons inside the ChatGPT app remain **planned, not implemented**.
+Tray **ChatGPT action bar** enables or disables the companion for the current session (default enabled; not persisted).
 
 ## Safety model
 
@@ -96,8 +100,8 @@ Global hotkeys never press Enter, Submit, or Send. They activate the target app 
 These actions are explicit execute intent:
 
 - **→ ChatGPT** (status bar)
-- Cursor Agent (companion bar, tray, or Command Palette)
-- Cursor Terminal (companion bar, tray, or Command Palette)
+- Cursor Agent (companion **AGT** or tray; current clipboard)
+- Cursor Terminal (companion **TER** or tray; current clipboard)
 
 If you want to edit first, use Copy and paste (`Ctrl+Alt+C` / `Ctrl+Alt+T` / `Ctrl+Alt+G`) instead.
 
@@ -178,7 +182,7 @@ Do not uninstall AutoHotkey unless you no longer need it. Do not delete the repo
 - Paste goes to whichever control already has focus inside the activated window.
 - Multiple matching windows may select the most recently active one.
 - Cursor URI actions target the topmost Cursor window, not a user-selected window.
-- The ChatGPT companion action bar tracks ChatGPT desktop only. It is not injected into ChatGPT.
+- The compact ChatGPT companion (**TER | AGT**) is MAG-controlled overlay UI near the composer. It is not injected into ChatGPT. It uses the current clipboard only; it does not auto-copy ChatGPT responses.
 - Hotkeys can conflict with third-party software.
 - An elevated app may block interaction from an unelevated script (Windows privilege isolation).
 - An existing Startup shortcut still points at the old script path if the repository is moved.

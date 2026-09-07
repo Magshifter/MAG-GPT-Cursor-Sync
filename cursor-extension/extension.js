@@ -43,12 +43,6 @@ function runHelper(ahkPath, helperPath) {
 	});
 }
 
-function hasAmbiguousMultiline(text) {
-	const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-	const trimmed = normalized.replace(/\n+$/u, "");
-	return trimmed.includes("\n");
-}
-
 async function sendToChatGPT(context) {
 	const ahkPath = findAutoHotkey();
 	if (!ahkPath) {
@@ -122,21 +116,16 @@ async function sendToCursorTerminal() {
 		return;
 	}
 
-	if (hasAmbiguousMultiline(text)) {
-		void vscode.window.showWarningMessage(
-			"Clipboard has multiple lines. [MAG] GPT|Cursor|Sync did not execute it in the Cursor terminal."
-		);
-		return;
-	}
-
 	const terminal = vscode.window.activeTerminal;
 	if (!terminal) {
 		void vscode.window.showWarningMessage("No Cursor integrated terminal is active.");
 		return;
 	}
 
+	// Normalize newlines for the terminal API; keep internal blank lines.
+	const payload = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/u, "");
 	terminal.show();
-	terminal.sendText(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/u, ""), true);
+	terminal.sendText(payload, true);
 }
 
 function handleExternalUri(uri) {
@@ -154,7 +143,7 @@ function activate(context) {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	item.text = "→ ChatGPT";
 	item.tooltip = "Send clipboard to ChatGPT";
-	item.color = "#89D185";
+	item.color = "#6E2323";
 	item.command = SEND_TO_CHATGPT;
 	item.show();
 	context.subscriptions.push(item);
