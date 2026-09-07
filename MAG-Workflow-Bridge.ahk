@@ -30,6 +30,7 @@ lastWinW := ""
 lastWinH := ""
 stableTicks := 0
 
+TraySetIcon(A_ScriptDir "\assets\MAG-GPT-Cursor-Sync.ico")
 InitTray()
 InitCompanionBar()
 SetTimer(UpdateCompanionBar, 200)
