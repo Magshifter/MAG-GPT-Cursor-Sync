@@ -176,6 +176,10 @@ async function completeShellExecutionCapture(event) {
 		(execution.commandLine && typeof execution.commandLine.value === "string"
 			? execution.commandLine.value
 			: "") || "";
+	// Empty/whitespace Shell Integration executions must not consume history slots.
+	if (commandLine.trim() === "") {
+		return;
+	}
 	const output = normalizeTerminalOutput(pending.chunks.join(""));
 	const exitCode = typeof event.exitCode === "number" ? event.exitCode : undefined;
 
