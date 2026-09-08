@@ -30,6 +30,7 @@ lastWinW := ""
 lastWinH := ""
 stableTicks := 0
 statusBarMenu := 0
+cursorModelsTelemetryMenu := 0
 
 TraySetIcon(A_ScriptDir "\assets\MAG-GPT-Cursor-Sync.ico")
 InitTray()
@@ -83,6 +84,13 @@ StatusBarSettingsPath()
     return EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync\settings.ini"
 }
 
+EnsureMagSettingsDir()
+{
+    dir := EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync"
+    if !DirExist(dir)
+        DirCreate(dir)
+}
+
 NormalizeStatusBarPosition(value)
 {
     position := StrLower(Trim(value))
@@ -101,9 +109,7 @@ ReadStatusBarPosition()
 
 WriteStatusBarPosition(position)
 {
-    dir := EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync"
-    if !DirExist(dir)
-        DirCreate(dir)
+    EnsureMagSettingsDir()
     IniWrite(NormalizeStatusBarPosition(position), StatusBarSettingsPath(), "StatusBar", "Position")
 }
 
@@ -124,6 +130,46 @@ SetStatusBarPosition(position)
     WriteStatusBarPosition(normalized)
     UpdateStatusBarCheckmarks(normalized)
     DispatchCursorUri("statusbar-" normalized)
+}
+
+NormalizeCursorModelsTelemetry(value)
+{
+    state := StrLower(Trim(value))
+    if state = "enabled" || state = "disabled"
+        return state
+    return "disabled"
+}
+
+ReadCursorModelsTelemetry()
+{
+    path := StatusBarSettingsPath()
+    if !FileExist(path)
+        return "disabled"
+    return NormalizeCursorModelsTelemetry(IniRead(path, "Telemetry", "CursorModels", "disabled"))
+}
+
+WriteCursorModelsTelemetry(state)
+{
+    EnsureMagSettingsDir()
+    IniWrite(NormalizeCursorModelsTelemetry(state), StatusBarSettingsPath(), "Telemetry", "CursorModels")
+}
+
+UpdateCursorModelsTelemetryCheckmarks(state)
+{
+    global cursorModelsTelemetryMenu
+    cursorModelsTelemetryMenu.Uncheck("Enabled")
+    cursorModelsTelemetryMenu.Uncheck("Disabled")
+    if state = "enabled"
+        cursorModelsTelemetryMenu.Check("Enabled")
+    else
+        cursorModelsTelemetryMenu.Check("Disabled")
+}
+
+SetCursorModelsTelemetry(state)
+{
+    normalized := NormalizeCursorModelsTelemetry(state)
+    WriteCursorModelsTelemetry(normalized)
+    UpdateCursorModelsTelemetryCheckmarks(normalized)
 }
 
 InitCompanionBar()
@@ -293,7 +339,7 @@ StartupIsEnabled()
 
 InitTray()
 {
-    global statusBarMenu
+    global statusBarMenu, cursorModelsTelemetryMenu
     A_TrayMenu.Delete()
     A_TrayMenu.Add("Cursor Agent", (*) => TriggerCursorCommand("agent"))
     A_TrayMenu.Add("Cursor Terminal", (*) => TriggerCursorCommand("terminal"))
@@ -306,6 +352,11 @@ InitTray()
     statusBarMenu.Add("Center", (*) => SetStatusBarPosition("center"))
     A_TrayMenu.Add("Status Bar Position", statusBarMenu)
     UpdateStatusBarCheckmarks(ReadStatusBarPosition())
+    cursorModelsTelemetryMenu := Menu()
+    cursorModelsTelemetryMenu.Add("Enabled", (*) => SetCursorModelsTelemetry("enabled"))
+    cursorModelsTelemetryMenu.Add("Disabled", (*) => SetCursorModelsTelemetry("disabled"))
+    A_TrayMenu.Add("Cursor Models Telemetry", cursorModelsTelemetryMenu)
+    UpdateCursorModelsTelemetryCheckmarks(ReadCursorModelsTelemetry())
     A_TrayMenu.Add()
     A_TrayMenu.Add("Enable startup", EnableStartup)
     A_TrayMenu.Add("Disable startup", DisableStartup)

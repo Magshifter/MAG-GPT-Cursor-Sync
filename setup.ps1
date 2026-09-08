@@ -90,7 +90,7 @@ function Add-ZipFileEntry {
 }
 
 function New-LocalVsix([object]$Identity, [string]$OutputPath) {
-	$requiredFiles = @("package.json", "extension.js", "helper.ahk", "agent-helper.ahk")
+	$requiredFiles = @("package.json", "extension.js", "cursorUsageProvider.js", "helper.ahk", "agent-helper.ahk")
 	foreach ($fileName in $requiredFiles) {
 		$path = Join-Path $ExtensionDir $fileName
 		if (-not (Test-Path $path)) {

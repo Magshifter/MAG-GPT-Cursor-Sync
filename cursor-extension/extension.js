@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const vscode = require("vscode");
+const { getCursorModelsPercentage } = require("./cursorUsageProvider");
 
 const SEND_TO_CHATGPT = "magWorkflowBridge.sendToChatGPT";
 const SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT = "magWorkflowBridge.sendLastTerminalOutputToChatGPT";
@@ -13,6 +14,8 @@ const COPY_LAST_COMMAND_AND_OUTPUT = "workbench.action.terminal.copyLastCommandA
 const STATUS_BAR_POSITION_KEY = "magWorkflowBridge.statusBarPosition";
 const DEFAULT_STATUS_BAR_POSITION = "center";
 const MAG_STATUS_BAR_COLOR = "#6E2323";
+const MAG_SETTINGS_DIR_NAME = "MAG-GPT-Cursor-Sync";
+const CURSOR_MODELS_TELEMETRY_FOOTER_RE = /\n*Cursor Models After: (?:\d+%|unavailable)\s*$/u;
 
 const STATUS_BAR_LAYOUTS = {
 	left: {
@@ -192,7 +195,88 @@ function clearTerminalState(terminal) {
 	}
 }
 
-async function sendToChatGPT(context) {
+function getMagSettingsPath() {
+	const localAppData = process.env.LOCALAPPDATA || "";
+	if (!localAppData) {
+		return null;
+	}
+	return path.join(localAppData, MAG_SETTINGS_DIR_NAME, "settings.ini");
+}
+
+/**
+ * Read [Telemetry] CursorModels from the MAG settings.ini used by the tray.
+ * Missing or invalid values default to disabled.
+ * @returns {boolean}
+ */
+function isCursorModelsTelemetryEnabled() {
+	const settingsPath = getMagSettingsPath();
+	if (!settingsPath || !fs.existsSync(settingsPath)) {
+		return false;
+	}
+
+	try {
+		const text = fs.readFileSync(settingsPath, "utf8");
+		const sectionMatch = text.match(/\[Telemetry\]([\s\S]*?)(?=\n\[|$)/i);
+		if (!sectionMatch) {
+			return false;
+		}
+		const valueMatch = sectionMatch[1].match(/^\s*CursorModels\s*=\s*(.+)\s*$/im);
+		if (!valueMatch) {
+			return false;
+		}
+		return String(valueMatch[1]).trim().toLowerCase() === "enabled";
+	} catch {
+		return false;
+	}
+}
+
+function stripCursorModelsTelemetryFooter(text) {
+	return String(text || "").replace(CURSOR_MODELS_TELEMETRY_FOOTER_RE, "");
+}
+
+/**
+ * When enabled, append a single Cursor Models footer to the current clipboard.
+ * Usage failure leaves the original clipboard unchanged and never blocks send.
+ */
+async function maybeAppendCursorModelsTelemetry() {
+	if (!isCursorModelsTelemetryEnabled()) {
+		return;
+	}
+
+	let percent = null;
+	try {
+		percent = await getCursorModelsPercentage(vscode.env.appRoot);
+	} catch {
+		percent = null;
+	}
+
+	if (percent === null) {
+		return;
+	}
+
+	const original = await vscode.env.clipboard.readText();
+	const base = stripCursorModelsTelemetryFooter(original).replace(/\s+$/u, "");
+	const payload = base
+		? `${base}\n\nCursor Models After: ${percent}%`
+		: `Cursor Models After: ${percent}%`;
+	await vscode.env.clipboard.writeText(payload);
+}
+
+/**
+ * @param {import("vscode").ExtensionContext} context
+ * @param {{ appendCursorModelsTelemetry?: boolean }} [options]
+ */
+async function sendToChatGPT(context, options = {}) {
+	const appendCursorModelsTelemetry = options.appendCursorModelsTelemetry === true;
+
+	if (appendCursorModelsTelemetry) {
+		try {
+			await maybeAppendCursorModelsTelemetry();
+		} catch {
+			// Telemetry must never block AGT → GPT.
+		}
+	}
+
 	const ahkPath = findAutoHotkey();
 	if (!ahkPath) {
 		void vscode.window.showWarningMessage("AutoHotkey v2 was not found. Install it, then try again.");
@@ -396,7 +480,9 @@ function activate(context) {
 	void initializeStatusBarPosition(context);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand(SEND_TO_CHATGPT, () => sendToChatGPT(context)),
+		vscode.commands.registerCommand(SEND_TO_CHATGPT, () =>
+			sendToChatGPT(context, { appendCursorModelsTelemetry: true })
+		),
 		vscode.commands.registerCommand(SEND_LAST_TERMINAL_OUTPUT_TO_CHATGPT, () =>
 			sendLastTerminalOutputToChatGPT(context)
 		),
