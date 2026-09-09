@@ -14,8 +14,8 @@
 ; Companion CLEAR | TER | AGT and tray Cursor Agent / Cursor Terminal
 ; use the current clipboard, then the Cursor URI.
 ;
-; TER (companion + tray Cursor Terminal): one-click freshness + one-use consume
-; + manual CLEAR recovery + paste-only into active terminal (no auto-execute). AGT unchanged.
+; TER (companion + tray Cursor Terminal): sequence + content fingerprint guards,
+; one-use consume, manual CLEAR recovery, paste-only (no auto-execute). AGT unchanged.
 ;
 ; TER_CLIP_OBS_LOGGING enables passive CLIP_OBS / TER_CLICK metadata logging only.
 
@@ -41,9 +41,10 @@ lastWinH := ""
 stableTicks := 0
 statusBarMenu := 0
 cursorModelsTelemetryMenu := 0
-; TER freshness baseline (sequence numbers only; no clipboard persistence).
+; TER product state (in-memory only; no clipboard persistence).
 ; Startup: existing clipboard generation is already consumed / ineligible.
 terminalConsumedSeq := GetClipboardSequenceNumber()
+lastConsumedTerminalFingerprint := ""
 ; Ephemeral diagnostic fingerprints only (never persisted / never logged).
 diagPrevTextFp := ""
 diagConsumedTextFp := ""
@@ -244,9 +245,10 @@ HandleClipboardObservation(type)
 ; Does not modify Windows clipboard contents and does not dispatch/execute.
 ClearTerminalAuthorization(*)
 {
-    global terminalConsumedSeq, TER_AUTH_DIAG_MODE, diagConsumedTextFp
+    global terminalConsumedSeq, lastConsumedTerminalFingerprint, TER_AUTH_DIAG_MODE, diagConsumedTextFp
     seq := GetClipboardSequenceNumber()
     terminalConsumedSeq := seq
+    lastConsumedTerminalFingerprint := ""
     ; Diagnostic-only: forget last TER-consumed text comparison target.
     diagConsumedTextFp := ""
     if TER_AUTH_DIAG_MODE
@@ -314,15 +316,15 @@ DispatchCursorUri(actionPath)
         Notify("Could not trigger Cursor (" actionPath ").")
 }
 
-LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, consumedSeq, decision, empty)
+LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, consumedSeq, decision, empty, reason)
 {
-    DiagLog("TER_CLICK`tevent=TER_CLICK`tseq=" seq "`tseqBeforeRead=" seqBeforeRead "`tseqAfterRead=" seqAfterRead "`treadSeqChanged=" readSeqChanged "`tconsumedSeq=" consumedSeq "`tdecision=" decision "`tempty=" empty "`tmode=paste-only")
+    DiagLog("TER_CLICK`tevent=TER_CLICK`tseq=" seq "`tseqBeforeRead=" seqBeforeRead "`tseqAfterRead=" seqAfterRead "`treadSeqChanged=" readSeqChanged "`tconsumedSeq=" consumedSeq "`tdecision=" decision "`tempty=" empty "`treason=" reason "`tmode=paste-only")
 }
 
-; One-click TER: eligible only when current clipboard generation is newer than consumed.
+; One-click TER: sequence + normalized content fingerprint guards (not user-intent proof).
 TriggerFreshnessTerminal()
 {
-    global terminalConsumedSeq, TER_CLIP_OBS_LOGGING, diagConsumedTextFp
+    global terminalConsumedSeq, lastConsumedTerminalFingerprint, TER_CLIP_OBS_LOGGING, diagConsumedTextFp
     ; Eligibility uses sequence captured BEFORE the clipboard read (existing semantics).
     seqBeforeRead := GetClipboardSequenceNumber()
     clipText := A_Clipboard
@@ -331,37 +333,51 @@ TriggerFreshnessTerminal()
     seq := seqBeforeRead
     empty := Trim(clipText, " `t`r`n") = ""
     emptyFlag := empty ? 1 : 0
-    allow := !empty && (seq > terminalConsumedSeq)
-    decision := allow ? "ALLOW" : "REFUSE"
-
-    if TER_CLIP_OBS_LOGGING
-        LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, terminalConsumedSeq, decision, emptyFlag)
+    reason := ""
+    decision := "REFUSE"
 
     if empty
+        reason := "empty"
+    else if seq <= terminalConsumedSeq
+        reason := "stale-sequence"
+    else
     {
-        Notify("Clipboard is empty.")
-        return
+        payload := NormalizeTerminalPayload(clipText)
+        fingerprint := Sha256HexUtf8(payload)
+        if fingerprint = ""
+            reason := "invalid-fingerprint"
+        else if lastConsumedTerminalFingerprint != "" && fingerprint = lastConsumedTerminalFingerprint
+            reason := "same-consumed-content"
+        else
+        {
+            decision := "ALLOW"
+            reason := "allow"
+            ; One-use: consume sequence and product fingerprint before URI dispatch.
+            terminalConsumedSeq := seq
+            lastConsumedTerminalFingerprint := fingerprint
+            if TER_CLIP_OBS_LOGGING
+            {
+                ; Diagnostic-only memory for later CLIP_OBS consumedState labels. Does not gate TER.
+                diagConsumedTextFp := fingerprint
+            }
+        }
     }
-    if seq <= terminalConsumedSeq
-    {
-        Notify("Copy a command first.")
-        return
-    }
-    payload := NormalizeTerminalPayload(clipText)
-    fingerprint := Sha256HexUtf8(payload)
-    if fingerprint = ""
-    {
-        Notify("Could not authorize terminal command.")
-        return
-    }
-    ; One-use: consume this generation before URI dispatch.
-    terminalConsumedSeq := seq
+
     if TER_CLIP_OBS_LOGGING
+        LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, terminalConsumedSeq, decision, emptyFlag, reason)
+
+    if decision = "ALLOW"
     {
-        ; Diagnostic-only memory for later CLIP_OBS consumedState labels. Does not gate TER.
-        diagConsumedTextFp := fingerprint
+        DispatchCursorUri("terminal?fp=" fingerprint)
+        return
     }
-    DispatchCursorUri("terminal?fp=" fingerprint)
+
+    if reason = "empty"
+        Notify("Clipboard is empty.")
+    else if reason = "invalid-fingerprint"
+        Notify("Could not authorize terminal command.")
+    else
+        Notify("Copy a command first.")
 }
 
 TriggerCursorCommand(actionPath)
