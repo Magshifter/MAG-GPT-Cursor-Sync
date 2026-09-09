@@ -556,6 +556,9 @@ function handleExternalUri(context, uri) {
 	if (action === "statusbar-center") {
 		return applyStatusBarPosition(context, "center");
 	}
+	if (action === "sendtogpt") {
+		return sendToChatGPT(context, { appendCursorModelsTelemetry: true });
+	}
 	void vscode.window.showWarningMessage("[MAG] GPT|Cursor|Sync: unknown Cursor URI action.");
 }
 

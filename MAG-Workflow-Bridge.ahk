@@ -9,7 +9,8 @@
 ;
 ; Ctrl+Alt+C -> Cursor
 ; Ctrl+Alt+T -> Windows Terminal
-; Ctrl+Alt+G -> ChatGPT
+; Ctrl+Alt+G -> ChatGPT (paste only)
+; Ctrl+Alt+Shift+G -> Send clipboard to ChatGPT (AGT → GPT via Cursor URI)
 ;
 ; Companion CLEAR | TER | AGT and tray Cursor Agent / Cursor Terminal
 ; use the current clipboard, then the Cursor URI.
@@ -67,6 +68,7 @@ if TER_CLIP_OBS_LOGGING
 ^!c:: PasteToTarget("Cursor.exe", "Cursor")
 ^!t:: PasteToTarget("WindowsTerminal.exe", "Windows Terminal")
 ^!g:: PasteToTarget("ChatGPT.exe", "ChatGPT")
+^!+g:: DispatchCursorUri("sendtogpt")
 
 PasteToTarget(exeName, displayName)
 {
@@ -663,6 +665,7 @@ InitTray()
     A_TrayMenu.Delete()
     A_TrayMenu.Add("Cursor Agent", (*) => TriggerCursorCommand("agent"))
     A_TrayMenu.Add("Cursor Terminal", (*) => TriggerCursorCommand("terminal"))
+    A_TrayMenu.Add("Send to ChatGPT`tCtrl+Alt+Shift+G", (*) => DispatchCursorUri("sendtogpt"))
     A_TrayMenu.Add("CLEAR TER", ClearTerminalAuthorization)
     A_TrayMenu.Add()
     A_TrayMenu.Add("ChatGPT action bar", ToggleActionBar)
