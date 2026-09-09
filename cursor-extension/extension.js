@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawn } = require("child_process");
 const vscode = require("vscode");
 const { getCursorModelsPercentage } = require("./cursorUsageProvider");
@@ -16,6 +17,7 @@ const DEFAULT_STATUS_BAR_POSITION = "center";
 const MAG_STATUS_BAR_COLOR = "#6E2323";
 const MAG_SETTINGS_DIR_NAME = "MAG-GPT-Cursor-Sync";
 const CURSOR_MODELS_TELEMETRY_FOOTER_RE = /\n*Cursor Models After: (?:\d+%|unavailable)\s*$/u;
+const TERMINAL_FINGERPRINT_RE = /^[a-f0-9]{64}$/i;
 
 const STATUS_BAR_LAYOUTS = {
 	left: {
@@ -400,7 +402,67 @@ async function sendToCursorAgent(context) {
 	}
 }
 
-async function sendToCursorTerminal() {
+/**
+ * Must match MAG-Workflow-Bridge.ahk NormalizeTerminalPayload().
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeTerminalPayload(text) {
+	return String(text || "")
+		.replace(/\r\n/g, "\n")
+		.replace(/\r/g, "\n")
+		.replace(/\n+$/u, "");
+}
+
+/**
+ * Transient SHA-256 fingerprint of the payload that would be executed.
+ * Must match MAG-Workflow-Bridge.ahk Sha256HexUtf8(NormalizeTerminalPayload(...)).
+ * @param {string} text
+ * @returns {string}
+ */
+function fingerprintTerminalPayload(text) {
+	return crypto.createHash("sha256").update(normalizeTerminalPayload(text), "utf8").digest("hex");
+}
+
+/**
+ * @param {import("vscode").Uri} uri
+ * @returns {string | null}
+ */
+function parseTerminalFingerprint(uri) {
+	const query = String(uri.query || "");
+	if (!query) {
+		return null;
+	}
+	try {
+		const params = new URLSearchParams(query);
+		const fp = params.get("fp");
+		if (!fp || !TERMINAL_FINGERPRINT_RE.test(fp)) {
+			return null;
+		}
+		return fp.toLowerCase();
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @param {{ requireFingerprint?: boolean, expectedFingerprint?: string | null, pasteOnly?: boolean }} [options]
+ */
+async function sendToCursorTerminal(options = {}) {
+	const requireFingerprint = options.requireFingerprint === true;
+	const pasteOnly = options.pasteOnly === true;
+	const expectedFingerprint =
+		typeof options.expectedFingerprint === "string" ? options.expectedFingerprint.toLowerCase() : null;
+
+	if (requireFingerprint) {
+		if (!expectedFingerprint || !TERMINAL_FINGERPRINT_RE.test(expectedFingerprint)) {
+			void vscode.window.showWarningMessage(
+				"Terminal execution was not authorized. Copy a command first."
+			);
+			return;
+		}
+	}
+
 	const text = await vscode.env.clipboard.readText();
 	if (!text) {
 		void vscode.window.showWarningMessage("Clipboard is empty.");
@@ -414,9 +476,21 @@ async function sendToCursorTerminal() {
 	}
 
 	// Normalize newlines for the terminal API; keep internal blank lines.
-	const payload = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/u, "");
+	const payload = normalizeTerminalPayload(text);
+
+	if (requireFingerprint) {
+		const actualFingerprint = fingerprintTerminalPayload(text);
+		if (actualFingerprint !== expectedFingerprint) {
+			void vscode.window.showWarningMessage(
+				"Clipboard changed before execution. Copy the command again."
+			);
+			return;
+		}
+	}
+
 	terminal.show();
-	terminal.sendText(payload, true);
+	// Companion/tray URI: paste only (false). Command Palette: execute (true).
+	terminal.sendText(payload, !pasteOnly);
 }
 
 function normalizeStatusBarPosition(value) {
@@ -469,7 +543,12 @@ function handleExternalUri(context, uri) {
 		return vscode.commands.executeCommand(SEND_TO_AGENT);
 	}
 	if (action === "terminal") {
-		return vscode.commands.executeCommand(SEND_TO_TERMINAL);
+		const expectedFingerprint = parseTerminalFingerprint(uri);
+		return sendToCursorTerminal({
+			requireFingerprint: true,
+			expectedFingerprint,
+			pasteOnly: true,
+		});
 	}
 	if (action === "statusbar-left") {
 		return applyStatusBarPosition(context, "left");

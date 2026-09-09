@@ -11,10 +11,20 @@
 ; Ctrl+Alt+T -> Windows Terminal
 ; Ctrl+Alt+G -> ChatGPT
 ;
-; Companion TER | AGT and tray Cursor Agent / Cursor Terminal
+; Companion CLEAR | TER | AGT and tray Cursor Agent / Cursor Terminal
 ; use the current clipboard, then the Cursor URI.
+;
+; TER (companion + tray Cursor Terminal): one-click freshness + one-use consume
+; + manual CLEAR recovery + paste-only into active terminal (no auto-execute). AGT unchanged.
+;
+; TER_CLIP_OBS_LOGGING enables passive CLIP_OBS / TER_CLICK metadata logging only.
 
 A_IconTip := "[MAG] GPT|Cursor|Sync"
+
+; Passive clipboard observation logging (metadata only; does not gate TER).
+TER_CLIP_OBS_LOGGING := true
+; Legacy name retained for diagnostic log helpers.
+TER_AUTH_DIAG_MODE := TER_CLIP_OBS_LOGGING
 
 actionBarEnabled := true
 companionVisible := false
@@ -31,11 +41,27 @@ lastWinH := ""
 stableTicks := 0
 statusBarMenu := 0
 cursorModelsTelemetryMenu := 0
+; TER freshness baseline (sequence numbers only; no clipboard persistence).
+; Startup: existing clipboard generation is already consumed / ineligible.
+terminalConsumedSeq := GetClipboardSequenceNumber()
+; Ephemeral diagnostic fingerprints only (never persisted / never logged).
+diagPrevTextFp := ""
+diagConsumedTextFp := ""
+
+if TER_CLIP_OBS_LOGGING
+    A_IconTip := "[MAG] GPT|Cursor|Sync [TER-OBS]"
 
 TraySetIcon(A_ScriptDir "\assets\MAG-GPT-Cursor-Sync.ico")
 InitTray()
 InitCompanionBar()
+; Observation only — must never authorize/consume/dispatch.
+OnClipboardChange(HandleClipboardObservation, 1)
 SetTimer(UpdateCompanionBar, 200)
+if TER_CLIP_OBS_LOGGING
+{
+    EnsureMagSettingsDir()
+    DiagLog("BOOT`tevent=DIAG_START`tmode=paste-only`tseq=" GetClipboardSequenceNumber() "`tconsumedSeq=" terminalConsumedSeq)
+}
 
 ^!c:: PasteToTarget("Cursor.exe", "Cursor")
 ^!t:: PasteToTarget("WindowsTerminal.exe", "Windows Terminal")
@@ -61,6 +87,225 @@ PasteToTarget(exeName, displayName)
     Send "^v"
 }
 
+GetClipboardSequenceNumber()
+{
+    return DllCall("user32\GetClipboardSequenceNumber", "UInt")
+}
+
+DiagLogPath()
+{
+    return EnvGet("LOCALAPPDATA") "\MAG-GPT-Cursor-Sync\ter-auth-diag.log"
+}
+
+DiagTimestamp()
+{
+    return FormatTime(, "yyyy-MM-dd HH:mm:ss") "." Format("{:03d}", A_MSec)
+}
+
+; Metadata only — never log clipboard text/hash/fingerprint/URI payloads.
+DiagLog(line)
+{
+    global TER_AUTH_DIAG_MODE
+    if !TER_AUTH_DIAG_MODE
+        return
+    try
+    {
+        EnsureMagSettingsDir()
+        FileAppend(DiagTimestamp() "`t" line "`n", DiagLogPath(), "UTF-8")
+    }
+}
+
+GetForegroundMeta(&procName, &pid, &hwnd)
+{
+    procName := "UNKNOWN"
+    pid := 0
+    hwnd := 0
+    try
+    {
+        hwnd := WinExist("A")
+        if !hwnd
+            return
+        pid := WinGetPID(hwnd)
+        procName := WinGetProcessName(hwnd)
+        if procName = ""
+            procName := "UNKNOWN"
+    }
+}
+
+; Win32 clipboard owner (observational metadata only; never TER authorization).
+GetClipboardOwnerMeta(&ownerProc, &ownerPid, &ownerHwnd)
+{
+    ownerProc := "UNKNOWN"
+    ownerPid := 0
+    ownerHwnd := 0
+    try
+    {
+        ownerHwnd := DllCall("user32\GetClipboardOwner", "Ptr")
+        if !ownerHwnd
+            return
+        ownerPid := WinGetPID(ownerHwnd)
+        ownerProc := WinGetProcessName(ownerHwnd)
+        if ownerProc = ""
+            ownerProc := "UNKNOWN"
+    }
+}
+
+LogClipObs(seq, type, textAvailable, fgProc, fgPid, fgHwnd, textState, consumedState)
+{
+    GetClipboardOwnerMeta(&ownerProc, &ownerPid, &ownerHwnd)
+    DiagLog("CLIP_OBS`tevent=CLIP_OBS`tseq=" seq "`ttype=" type "`ttextAvailable=" textAvailable "`tfgProc=" fgProc "`tfgPid=" fgPid "`tfgHwnd=" fgHwnd "`townerHwnd=" ownerHwnd "`townerPid=" ownerPid "`townerProc=" ownerProc "`ttextState=" textState "`tconsumedState=" consumedState)
+}
+
+ClassifyAgainstPrevious(fp, empty)
+{
+    global diagPrevTextFp
+    if empty
+        return "EMPTY"
+    if fp = ""
+        return "UNKNOWN"
+    if diagPrevTextFp = ""
+        return "FIRST"
+    if fp = diagPrevTextFp
+        return "SAME_PREVIOUS"
+    return "DIFFERENT_PREVIOUS"
+}
+
+ClassifyAgainstConsumed(fp, empty)
+{
+    global diagConsumedTextFp
+    if empty
+        return "EMPTY"
+    if fp = ""
+        return "UNKNOWN"
+    if diagConsumedTextFp = ""
+        return "NONE"
+    if fp = diagConsumedTextFp
+        return "SAME_CONSUMED"
+    return "DIFFERENT_CONSUMED"
+}
+
+; Passiveive observation only. Never authorizes, consumes, or dispatches.
+HandleClipboardObservation(type)
+{
+    global TER_AUTH_DIAG_MODE, diagPrevTextFp
+    if !TER_AUTH_DIAG_MODE
+        return
+
+    seq := GetClipboardSequenceNumber()
+    GetForegroundMeta(&fgProc, &fgPid, &fgHwnd)
+
+    textAvailable := 0
+    textState := "NONE"
+    consumedState := "NONE"
+    fp := ""
+
+    if type = 0
+    {
+        textAvailable := 0
+        textState := "EMPTY"
+        consumedState := "EMPTY"
+        LogClipObs(seq, type, textAvailable, fgProc, fgPid, fgHwnd, textState, consumedState)
+        diagPrevTextFp := ""
+        return
+    }
+
+    if type != 1
+    {
+        textAvailable := 0
+        textState := "UNKNOWN"
+        consumedState := "UNKNOWN"
+        LogClipObs(seq, type, textAvailable, fgProc, fgPid, fgHwnd, textState, consumedState)
+        return
+    }
+
+    ; type 1 = text available from AHK's perspective.
+    clipText := A_Clipboard
+    empty := Trim(clipText, " `t`r`n") = ""
+    if empty
+    {
+        textAvailable := 0
+        textState := "EMPTY"
+        consumedState := "EMPTY"
+        LogClipObs(seq, type, textAvailable, fgProc, fgPid, fgHwnd, textState, consumedState)
+        diagPrevTextFp := ""
+        return
+    }
+
+    textAvailable := 1
+    fp := Sha256HexUtf8(NormalizeTerminalPayload(clipText))
+    textState := ClassifyAgainstPrevious(fp, false)
+    consumedState := ClassifyAgainstConsumed(fp, false)
+    LogClipObs(seq, type, textAvailable, fgProc, fgPid, fgHwnd, textState, consumedState)
+    if fp != ""
+        diagPrevTextFp := fp
+}
+
+; Manual TER recovery: mark current clipboard generation consumed/ineligible.
+; Does not modify Windows clipboard contents and does not dispatch/execute.
+ClearTerminalAuthorization(*)
+{
+    global terminalConsumedSeq, TER_AUTH_DIAG_MODE, diagConsumedTextFp
+    seq := GetClipboardSequenceNumber()
+    terminalConsumedSeq := seq
+    ; Diagnostic-only: forget last TER-consumed text comparison target.
+    diagConsumedTextFp := ""
+    if TER_AUTH_DIAG_MODE
+        DiagLog("CLEAR`tevent=CLEAR`tseq=" seq "`tconsumedSeq=" terminalConsumedSeq "`tdecision=RESET")
+    Notify("TER reset. Copy a command before TER.")
+}
+
+; Must match cursor-extension/extension.js normalizeTerminalPayload().
+NormalizeTerminalPayload(text)
+{
+    normalized := StrReplace(text, "`r`n", "`n")
+    normalized := StrReplace(normalized, "`r", "`n")
+    return RegExReplace(normalized, "\n+$", "")
+}
+
+Utf8Buffer(text)
+{
+    size := StrPut(text, "UTF-8") - 1
+    if size < 0
+        size := 0
+    buf := Buffer(size)
+    if size > 0
+        StrPut(text, buf, "UTF-8")
+    return buf
+}
+
+; SHA-256 hex of UTF-8 bytes (must match Node crypto.createHash('sha256')).
+Sha256HexUtf8(text)
+{
+    data := Utf8Buffer(text)
+    hProv := 0
+    hHash := 0
+    ; PROV_RSA_AES = 24, CRYPT_VERIFYCONTEXT = 0xF0000000, CALG_SHA_256 = 0x800c, HP_HASHVAL = 2
+    if !DllCall("advapi32\CryptAcquireContextW", "Ptr*", &hProv, "Ptr", 0, "Ptr", 0, "UInt", 24, "UInt", 0xF0000000)
+        return ""
+    if !DllCall("advapi32\CryptCreateHash", "Ptr", hProv, "UInt", 0x800C, "Ptr", 0, "UInt", 0, "Ptr*", &hHash)
+    {
+        DllCall("advapi32\CryptReleaseContext", "Ptr", hProv, "UInt", 0)
+        return ""
+    }
+    if !DllCall("advapi32\CryptHashData", "Ptr", hHash, "Ptr", data, "UInt", data.Size, "UInt", 0)
+    {
+        DllCall("advapi32\CryptDestroyHash", "Ptr", hHash)
+        DllCall("advapi32\CryptReleaseContext", "Ptr", hProv, "UInt", 0)
+        return ""
+    }
+    hashLen := 32
+    hash := Buffer(32)
+    ok := DllCall("advapi32\CryptGetHashParam", "Ptr", hHash, "UInt", 2, "Ptr", hash, "UInt*", &hashLen, "UInt", 0)
+    DllCall("advapi32\CryptDestroyHash", "Ptr", hHash)
+    DllCall("advapi32\CryptReleaseContext", "Ptr", hProv, "UInt", 0)
+    if !ok || hashLen != 32
+        return ""
+    hex := ""
+    loop 32
+        hex .= Format("{:02x}", NumGet(hash, A_Index - 1, "UChar"))
+    return hex
+}
+
 DispatchCursorUri(actionPath)
 {
     uri := "cursor://magshifter.mag-workflow-bridge/" actionPath
@@ -69,8 +314,63 @@ DispatchCursorUri(actionPath)
         Notify("Could not trigger Cursor (" actionPath ").")
 }
 
+LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, consumedSeq, decision, empty)
+{
+    DiagLog("TER_CLICK`tevent=TER_CLICK`tseq=" seq "`tseqBeforeRead=" seqBeforeRead "`tseqAfterRead=" seqAfterRead "`treadSeqChanged=" readSeqChanged "`tconsumedSeq=" consumedSeq "`tdecision=" decision "`tempty=" empty "`tmode=paste-only")
+}
+
+; One-click TER: eligible only when current clipboard generation is newer than consumed.
+TriggerFreshnessTerminal()
+{
+    global terminalConsumedSeq, TER_CLIP_OBS_LOGGING, diagConsumedTextFp
+    ; Eligibility uses sequence captured BEFORE the clipboard read (existing semantics).
+    seqBeforeRead := GetClipboardSequenceNumber()
+    clipText := A_Clipboard
+    seqAfterRead := GetClipboardSequenceNumber()
+    readSeqChanged := (seqAfterRead != seqBeforeRead) ? 1 : 0
+    seq := seqBeforeRead
+    empty := Trim(clipText, " `t`r`n") = ""
+    emptyFlag := empty ? 1 : 0
+    allow := !empty && (seq > terminalConsumedSeq)
+    decision := allow ? "ALLOW" : "REFUSE"
+
+    if TER_CLIP_OBS_LOGGING
+        LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, terminalConsumedSeq, decision, emptyFlag)
+
+    if empty
+    {
+        Notify("Clipboard is empty.")
+        return
+    }
+    if seq <= terminalConsumedSeq
+    {
+        Notify("Copy a command first.")
+        return
+    }
+    payload := NormalizeTerminalPayload(clipText)
+    fingerprint := Sha256HexUtf8(payload)
+    if fingerprint = ""
+    {
+        Notify("Could not authorize terminal command.")
+        return
+    }
+    ; One-use: consume this generation before URI dispatch.
+    terminalConsumedSeq := seq
+    if TER_CLIP_OBS_LOGGING
+    {
+        ; Diagnostic-only memory for later CLIP_OBS consumedState labels. Does not gate TER.
+        diagConsumedTextFp := fingerprint
+    }
+    DispatchCursorUri("terminal?fp=" fingerprint)
+}
+
 TriggerCursorCommand(actionPath)
 {
+    if actionPath = "terminal"
+    {
+        TriggerFreshnessTerminal()
+        return
+    }
     if Trim(A_Clipboard, " `t`r`n") = ""
     {
         Notify("Clipboard is empty.")
@@ -183,10 +483,14 @@ InitCompanionBar()
     companionGui.MarginX := 0
     companionGui.MarginY := 0
     companionGui.SetFont("s9", "Segoe UI")
-    ter := companionGui.Add("Button", "x0 y0 w46 h28", "TER")
+    ; CLEAR uses Text (not themed Button) so muted-red Background is reliable on Win11.
+    clearBtn := companionGui.Add("Text", "x0 y0 w50 h28 Center 0x200 Border BackgroundB07A7A cF5F5F5", "CLEAR")
+    ter := companionGui.Add("Button", "x+6 yp w46 h28", "TER")
     agt := companionGui.Add("Button", "x+6 yp w46 h28", "AGT")
-    try ter.ToolTip := "Execute current clipboard in Cursor Terminal"
+    try clearBtn.ToolTip := "Reset TER state (recovery). Copy a command afterward."
+    try ter.ToolTip := "Paste current clipboard into Cursor Terminal (press Enter to run)"
     try agt.ToolTip := "Send current clipboard to Cursor Agent"
+    clearBtn.OnEvent("Click", ClearTerminalAuthorization)
     ter.OnEvent("Click", (*) => TriggerCursorCommand("terminal"))
     agt.OnEvent("Click", (*) => TriggerCursorCommand("agent"))
     companionGui.Show("Hide")
@@ -343,6 +647,7 @@ InitTray()
     A_TrayMenu.Delete()
     A_TrayMenu.Add("Cursor Agent", (*) => TriggerCursorCommand("agent"))
     A_TrayMenu.Add("Cursor Terminal", (*) => TriggerCursorCommand("terminal"))
+    A_TrayMenu.Add("CLEAR TER", ClearTerminalAuthorization)
     A_TrayMenu.Add()
     A_TrayMenu.Add("ChatGPT action bar", ToggleActionBar)
     A_TrayMenu.Check("ChatGPT action bar")
