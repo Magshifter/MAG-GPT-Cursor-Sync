@@ -23,7 +23,7 @@
 A_IconTip := "[MAG] GPT|Cursor|Sync"
 
 ; Passive clipboard observation logging (metadata only; does not gate TER).
-TER_CLIP_OBS_LOGGING := true
+TER_CLIP_OBS_LOGGING := false
 ; Legacy name retained for diagnostic log helpers.
 TER_AUTH_DIAG_MODE := TER_CLIP_OBS_LOGGING
 
@@ -57,7 +57,8 @@ TraySetIcon(A_ScriptDir "\assets\MAG-GPT-Cursor-Sync.ico")
 InitTray()
 InitCompanionBar()
 ; Observation only — must never authorize/consume/dispatch.
-OnClipboardChange(HandleClipboardObservation, 1)
+if TER_CLIP_OBS_LOGGING
+    OnClipboardChange(HandleClipboardObservation, 1)
 SetTimer(UpdateCompanionBar, 200)
 if TER_CLIP_OBS_LOGGING
 {
