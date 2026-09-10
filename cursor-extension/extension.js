@@ -489,7 +489,7 @@ async function sendToCursorTerminal(options = {}) {
 	}
 
 	terminal.show();
-	// Companion/tray URI: paste only (false). Command Palette: execute (true).
+	// sendText addNewLine=true executes. Companion/tray URI and Command Palette both auto-execute.
 	terminal.sendText(payload, !pasteOnly);
 }
 
@@ -547,7 +547,7 @@ function handleExternalUri(context, uri) {
 		return sendToCursorTerminal({
 			requireFingerprint: true,
 			expectedFingerprint,
-			pasteOnly: true,
+			pasteOnly: false,
 		});
 	}
 	if (action === "statusbar-left") {
