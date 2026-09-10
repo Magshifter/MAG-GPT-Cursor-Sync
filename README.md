@@ -11,7 +11,7 @@ Public repository name: `MAG-GPT-Cursor-Sync`.
 
 Some internal technical identifiers intentionally retain the historical `MAG Workflow Bridge` name for compatibility.
 
-Current version: **1.0.0**
+Current version: **1.1.0**
 
 ## Purpose
 
@@ -34,6 +34,7 @@ the workflow can be reduced to explicit actions:
 | Clipboard → Cursor | `Ctrl+Alt+C` |
 | Clipboard → Windows Terminal | `Ctrl+Alt+T` |
 | Clipboard → ChatGPT | `Ctrl+Alt+G` |
+| Clipboard → ChatGPT (auto-submit) | `Ctrl+Alt+Shift+G` (Global Send-to-GPT) |
 
 The product does not scrape ChatGPT messages.
 
@@ -62,6 +63,8 @@ Typical workflow:
 Workflow:
 
 `Copy → AGT → GPT → ChatGPT`
+
+When optional Cursor Models telemetry is enabled and available, **AGT → GPT** may append `Cursor Models After: NN%` before auto-submit.
 
 ### TER → GPT
 
@@ -137,6 +140,7 @@ The history:
 - is stored separately for each Cursor Terminal;
 - contains up to the last 3 completed executions;
 - includes the command line and captured output;
+- ignores empty or whitespace-only command entries;
 - is not persisted to disk;
 - does not combine histories from different terminals;
 - contains only executions observed while the current extension runtime is active.
@@ -232,7 +236,7 @@ It does not:
 
 While ChatGPT Desktop is active, the companion displays:
 
-**TER | AGT**
+**CLEAR | TER | AGT**
 
 near the lower part of the ChatGPT window.
 
@@ -241,6 +245,25 @@ It hides when ChatGPT is not active.
 It also hides while the ChatGPT window is moving or resizing and reappears after the window position stabilizes.
 
 Browser ChatGPT is not supported.
+
+### CLEAR
+
+**CLEAR** resets Companion/Tray TER authorization and replay state.
+
+It:
+
+- marks the current clipboard generation as consumed/ineligible;
+- clears the last consumed TER content fingerprint;
+- does **not** write to or modify the Windows clipboard;
+- does **not** dispatch or execute anything.
+
+After **CLEAR**, a new **Copy** is required before **TER** can authorize again.
+
+**CLEAR** + new **Copy** of the same command may authorize **TER** again under the normal guards.
+
+Tray equivalent:
+
+**CLEAR TER**
 
 ### ChatGPT → Cursor Agent
 
@@ -310,35 +333,63 @@ If no Cursor integrated Terminal is active, the action warns and does nothing.
 
 The utility does not automatically create a Terminal.
 
+Companion **TER** and tray **Cursor Terminal** are **guarded AUTO-EXECUTE** paths.
+
+Before execution, the current authorization model requires:
+
+- a non-empty clipboard;
+- a clipboard sequence newer than the last consumed TER sequence;
+- a valid normalized SHA-256 fingerprint of the clipboard payload;
+- rejection of the same already-consumed content fingerprint;
+- an expected fingerprint passed through the guarded Cursor URI;
+- extension-side verification that the actual clipboard fingerprint matches the expected fingerprint before execution;
+- fail-closed behavior on mismatch or race;
+- one-use consumption on successful authorization.
+
+These guards reduce stale-copy, replay, and race risk.
+
+They do **not** prove deliberate user intent or clipboard origin.
+
+After a successful **TER**, pressing **TER** again without a new **Copy** is refused.
+
+Use **CLEAR** (or tray **CLEAR TER**) to reset TER state, then **Copy** again.
+
 Tray action:
 
 **Cursor Terminal**
 
-uses the same behavior.
+uses the same guarded AUTO-EXECUTE behavior.
 
 URI:
 
 ```text
-cursor://magshifter.mag-workflow-bridge/terminal
+cursor://magshifter.mag-workflow-bridge/terminal?fp=<fingerprint>
 ```
 
-Command:
+The fingerprint is computed by the Windows component before dispatch.
+
+Command Palette:
 
 ```text
 magWorkflowBridge.sendToCursorTerminal
 ```
 
+remains a separate **AUTO-EXECUTE** path.
+
+It does not use the Companion/Tray guarded TER authorization model.
+
 ## Global hotkeys
 
-Three global hotkeys are available.
+Four global hotkeys are available.
 
-| Hotkey | Target |
-|---|---|
-| `Ctrl+Alt+C` | Cursor |
-| `Ctrl+Alt+T` | Windows Terminal |
-| `Ctrl+Alt+G` | ChatGPT Desktop |
+| Hotkey | Target | Behavior |
+|---|---|---|
+| `Ctrl+Alt+C` | Cursor | Paste only |
+| `Ctrl+Alt+T` | Windows Terminal | Paste only |
+| `Ctrl+Alt+G` | ChatGPT Desktop | Paste only |
+| `Ctrl+Alt+Shift+G` | ChatGPT Desktop | Global Send-to-GPT (auto-submit) |
 
-These hotkeys are intentionally **paste-only**.
+`Ctrl+Alt+C`, `Ctrl+Alt+T`, and `Ctrl+Alt+G` are intentionally **paste-only**.
 
 They:
 
@@ -366,11 +417,29 @@ Activates ChatGPT Desktop and pastes the clipboard.
 
 It does not automatically send the message.
 
+### Ctrl+Alt+Shift+G
+
+**Global Send-to-GPT** sends the current clipboard to ChatGPT Desktop and automatically submits the message.
+
+It uses the same Send-to-ChatGPT pipeline as tray **Send to ChatGPT**.
+
+When optional Cursor Models telemetry is enabled and available, this path may append:
+
+```text
+Cursor Models After: NN%
+```
+
+If telemetry cannot be retrieved, the original clipboard content is sent unchanged.
+
 ## Safety model
 
-The utility deliberately separates **paste-only** actions from explicit **send/execute** actions.
+The utility deliberately separates three kinds of behavior:
 
-Paste-only actions:
+1. **Paste-only** — activate target and paste; user decides whether to send or execute.
+2. **Auto-submit** — send clipboard content to ChatGPT and submit automatically.
+3. **Auto-execute** — send validated clipboard content to Cursor integrated Terminal and execute automatically.
+
+### Paste-only actions
 
 ```text
 Ctrl+Alt+C
@@ -380,35 +449,58 @@ Ctrl+Alt+G
 
 These never press Enter.
 
-Explicit automatic actions:
+### Auto-submit actions
 
 ```text
 AGT → GPT
 TER → GPT
 2
 3
-AGT
-TER
+Ctrl+Alt+Shift+G
+Send to ChatGPT (tray)
 ```
 
 Their behavior:
 
-- **AGT → GPT** — sends the current clipboard to ChatGPT;
-- **TER → GPT** — sends the latest Cursor Terminal command and output to ChatGPT;
-- **2** — sends the last 2 captured terminal executions to ChatGPT;
-- **3** — sends the last 3 captured terminal executions to ChatGPT;
-- **AGT** — sends the current clipboard to Cursor Agent;
-- **TER** — executes the current clipboard in Cursor Terminal.
+- **AGT → GPT** — sends the current clipboard to ChatGPT and auto-submits;
+- **TER → GPT** — sends the latest Cursor Terminal command and output to ChatGPT and auto-submits;
+- **2** — sends the last 2 captured terminal executions to ChatGPT and auto-submits;
+- **3** — sends the last 3 captured terminal executions to ChatGPT and auto-submits;
+- **Ctrl+Alt+Shift+G** / tray **Send to ChatGPT** — sends the current clipboard to ChatGPT and auto-submits.
+
+**TER → GPT**, **2**, and **3** do not append Cursor Models telemetry.
+
+### Auto-execute actions
+
+```text
+Companion TER
+Tray Cursor Terminal
+magWorkflowBridge.sendToCursorTerminal (Command Palette)
+```
+
+Their behavior:
+
+- **Companion TER** and **Tray Cursor Terminal** — guarded AUTO-EXECUTE in the active Cursor integrated Terminal after the TER authorization checks described above;
+- **magWorkflowBridge.sendToCursorTerminal** — AUTO-EXECUTE from the Command Palette without the Companion/Tray guarded TER authorization model.
+
+Other explicit actions:
+
+- **AGT** — sends the current clipboard to Cursor Agent and auto-submits;
+- companion **AGT** does not append Cursor Models telemetry.
 
 If you want to inspect or edit content first, use normal Copy/Paste or the paste-only global hotkeys.
 
 ### Important TER warning
 
-Pressing **TER** means:
+Pressing Companion **TER** or tray **Cursor Terminal** means:
 
-**execute the current clipboard in Cursor Terminal**
+**execute the current clipboard in Cursor Terminal after the existing TER guards pass**
 
 Always verify the clipboard before pressing **TER**.
+
+The TER guards reduce stale/replay/race risk.
+
+They do not prove deliberate user intent or clipboard origin.
 
 ## Requirements
 
@@ -681,12 +773,15 @@ Use tray **Exit** to stop:
 
 The tray provides access to:
 
-- Cursor Agent action;
-- Cursor Terminal action;
-- ChatGPT companion control;
-- Status Bar Position;
-- Startup control;
-- Exit.
+- **Cursor Agent** — current clipboard → Cursor Agent → submit;
+- **Cursor Terminal** — guarded AUTO-EXECUTE in active Cursor integrated Terminal;
+- **Send to ChatGPT** (`Ctrl+Alt+Shift+G`) — Global Send-to-GPT (auto-submit);
+- **CLEAR TER** — reset TER authorization/replay state;
+- **ChatGPT action bar** — show/hide the ChatGPT companion;
+- **Status Bar Position** — Left or Center;
+- **Cursor Models Telemetry** — Enabled or Disabled;
+- **Enable startup** / **Disable startup**;
+- **Exit**.
 
 ### Status Bar Position
 
@@ -731,6 +826,68 @@ The Cursor extension also persists its selected position using extension `global
 Changing the position from the tray updates the Cursor extension immediately through the existing Cursor URI mechanism.
 
 The script does not continuously poll Cursor and does not use filesystem watchers for synchronization.
+
+## Cursor Models telemetry
+
+Optional Cursor Models telemetry is available from the tray menu:
+
+```text
+Cursor Models Telemetry
+├─ Enabled
+└─ Disabled
+```
+
+Default when the setting is absent or invalid:
+
+**Disabled**
+
+The selection is persisted locally in:
+
+```text
+%LOCALAPPDATA%\MAG-GPT-Cursor-Sync\settings.ini
+```
+
+Example:
+
+```ini
+[Telemetry]
+CursorModels=enabled
+```
+
+Allowed values:
+
+```text
+enabled
+disabled
+```
+
+When enabled and the current Cursor Models percentage is available, eligible Send-to-GPT paths append exactly one footer to the clipboard payload immediately before transfer to ChatGPT Desktop:
+
+```text
+Cursor Models After: NN%
+```
+
+Eligible paths:
+
+- **AGT → GPT** (Cursor status bar);
+- **Ctrl+Alt+Shift+G** (Global Send-to-GPT);
+- tray **Send to ChatGPT**;
+- `magWorkflowBridge.sendToChatGPT`.
+
+Not eligible:
+
+- **TER → GPT**, **2**, and **3**;
+- companion **AGT**;
+- companion/tray **TER**;
+- terminal execution paths.
+
+If usage cannot be retrieved, the original clipboard content is sent unchanged.
+
+No `unavailable` footer is added.
+
+Credentials, tokens, and usage data are not persisted, logged, or sent to ChatGPT.
+
+Telemetry retrieval is limited to the current Cursor endpoint used by the implementation.
 
 ## Optional Windows startup
 
@@ -820,7 +977,8 @@ Current technical URI actions include:
 
 ```text
 cursor://magshifter.mag-workflow-bridge/agent
-cursor://magshifter.mag-workflow-bridge/terminal
+cursor://magshifter.mag-workflow-bridge/terminal?fp=<fingerprint>
+cursor://magshifter.mag-workflow-bridge/sendtogpt
 cursor://magshifter.mag-workflow-bridge/statusbar-left
 cursor://magshifter.mag-workflow-bridge/statusbar-center
 ```
@@ -947,8 +1105,12 @@ There is no need to globally weaken the Windows PowerShell execution policy.
 - Paste goes to the control that already has focus inside the activated target window.
 - Browser ChatGPT is not supported.
 - Multiple matching application windows may cause the most recently active matching window to be selected.
-- Cursor integrated Terminal must already exist before using **TER**.
-- **TER** does not create a new Terminal automatically.
+- Cursor integrated Terminal must already exist before using Companion **TER** or tray **Cursor Terminal**.
+- Companion/tray **TER** does not create a new Terminal automatically.
+- Companion/tray **TER** refuses stale, replayed, or mismatched clipboard content under the current TER guards.
+- **CLEAR** / **CLEAR TER** does not modify clipboard contents.
+- Passive clipboard diagnostic observation is disabled by default in production and is not a normal product feature.
+- On Windows component startup, the current clipboard generation is already treated as consumed for Companion/Tray **TER** until a new **Copy** occurs.
 - **2** and **3** cannot retroactively capture output that occurred before the current extension runtime started listening.
 - Terminal runtime history is intentionally not persisted.
 - The ChatGPT companion uses the current clipboard and does not automatically copy ChatGPT responses.
@@ -1018,7 +1180,7 @@ https://github.com/Magshifter/MAG-GPT-Cursor-Sync
 Current version:
 
 ```text
-1.0.0
+1.1.0
 ```
 
 Author:
@@ -1080,6 +1242,9 @@ Copy → TER
 
 Cursor → ChatGPT:
 AGT → GPT
+
+Global clipboard → ChatGPT:
+Ctrl+Alt+Shift+G
 
 Cursor Terminal → ChatGPT:
 TER → GPT / 2 / 3

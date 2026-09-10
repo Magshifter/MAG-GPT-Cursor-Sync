@@ -180,11 +180,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Setup finished."
+Write-Host ("Setup finished (v" + $identity.Version + ").")
 Write-Host "Next:"
 Write-Host "  1. Reload Cursor if it is already open."
 Write-Host "  2. Run MAG-Workflow-Bridge.ahk"
 Write-Host "  3. Optional: tray menu -> Enable startup"
 Write-Host ""
-Write-Host "Cursor -> ChatGPT: Copy Message, then click -> ChatGPT"
+Write-Host "Cursor -> ChatGPT: AGT -> GPT, Ctrl+Alt+Shift+G, or tray Send to ChatGPT"
+Write-Host "ChatGPT -> Cursor: Copy, then companion TER or AGT"
 Write-Host ("Uninstall extension: cursor --uninstall-extension " + $ExtensionId)

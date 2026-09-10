@@ -16,7 +16,7 @@
 ; use the current clipboard, then the Cursor URI.
 ;
 ; TER (companion + tray Cursor Terminal): sequence + content fingerprint guards,
-; one-use consume, manual CLEAR recovery, paste-only (no auto-execute). AGT unchanged.
+; one-use consume, manual CLEAR recovery, guarded auto-execute. AGT unchanged.
 ;
 ; TER_CLIP_OBS_LOGGING enables passive CLIP_OBS / TER_CLICK metadata logging only.
 
@@ -63,7 +63,7 @@ SetTimer(UpdateCompanionBar, 200)
 if TER_CLIP_OBS_LOGGING
 {
     EnsureMagSettingsDir()
-    DiagLog("BOOT`tevent=DIAG_START`tmode=paste-only`tseq=" GetClipboardSequenceNumber() "`tconsumedSeq=" terminalConsumedSeq)
+    DiagLog("BOOT`tevent=DIAG_START`tmode=guarded-auto-execute`tseq=" GetClipboardSequenceNumber() "`tconsumedSeq=" terminalConsumedSeq)
 }
 
 ^!c:: PasteToTarget("Cursor.exe", "Cursor")
@@ -321,7 +321,7 @@ DispatchCursorUri(actionPath)
 
 LogTerClick(seq, seqBeforeRead, seqAfterRead, readSeqChanged, consumedSeq, decision, empty, reason)
 {
-    DiagLog("TER_CLICK`tevent=TER_CLICK`tseq=" seq "`tseqBeforeRead=" seqBeforeRead "`tseqAfterRead=" seqAfterRead "`treadSeqChanged=" readSeqChanged "`tconsumedSeq=" consumedSeq "`tdecision=" decision "`tempty=" empty "`treason=" reason "`tmode=paste-only")
+    DiagLog("TER_CLICK`tevent=TER_CLICK`tseq=" seq "`tseqBeforeRead=" seqBeforeRead "`tseqAfterRead=" seqAfterRead "`treadSeqChanged=" readSeqChanged "`tconsumedSeq=" consumedSeq "`tdecision=" decision "`tempty=" empty "`treason=" reason "`tmode=guarded-auto-execute")
 }
 
 ; One-click TER: sequence + normalized content fingerprint guards (not user-intent proof).
@@ -507,7 +507,7 @@ InitCompanionBar()
     ter := companionGui.Add("Button", "x+6 yp w46 h28", "TER")
     agt := companionGui.Add("Button", "x+6 yp w46 h28", "AGT")
     try clearBtn.ToolTip := "Reset TER state (recovery). Copy a command afterward."
-    try ter.ToolTip := "Paste current clipboard into Cursor Terminal (press Enter to run)"
+    try ter.ToolTip := "Send authorized clipboard to active Cursor Terminal (auto-execute)"
     try agt.ToolTip := "Send current clipboard to Cursor Agent"
     clearBtn.OnEvent("Click", ClearTerminalAuthorization)
     ter.OnEvent("Click", (*) => TriggerCursorCommand("terminal"))

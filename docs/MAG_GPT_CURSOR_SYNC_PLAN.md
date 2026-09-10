@@ -23,7 +23,11 @@ Current local repository directory:
 
 `MAG-Workflow-Bridge`
 
-Current version baseline:
+Current planning release:
+
+`1.1.0`
+
+Previous stable baseline:
 
 `1.0.0`
 
@@ -79,7 +83,11 @@ The application must not silently execute unrelated actions or guess the user's 
 
 ## 4. Current verified baseline
 
-Current stable baseline:
+Approved release scope:
+
+`v1.1.0`
+
+Previous shipped baseline:
 
 `v1.0.0`
 
@@ -90,10 +98,15 @@ The existing implementation combines:
 - ChatGPT Desktop integration;
 - Windows Terminal integration;
 - Cursor Terminal Shell Integration;
-- Status Bar actions;
-- ChatGPT companion controls;
-- paste-only global hotkeys;
-- explicit send/execute actions.
+- Status Bar actions (`TER → GPT | 2 | 3 | AGT → GPT`);
+- ChatGPT companion controls (`CLEAR | TER | AGT`);
+- paste-only global hotkeys (`Ctrl+Alt+C`, `Ctrl+Alt+T`, `Ctrl+Alt+G`);
+- Global Send-to-GPT (`Ctrl+Alt+Shift+G`, tray **Send to ChatGPT**);
+- guarded Companion/Tray TER AUTO-EXECUTE;
+- TER authorization/replay guards and **CLEAR TER** recovery;
+- optional Cursor Models telemetry (disabled by default);
+- Status Bar position Left/Center (default Center);
+- runtime Terminal history for **2** / **3** (max 3, per-terminal, non-persistent).
 
 ### 4.1 Global paste-only hotkeys
 
@@ -157,7 +170,11 @@ Logically resets TER eligibility (recovery). Does not clear the Windows clipboar
 
 `TER`
 
-Sends the current clipboard contents to the active Cursor integrated Terminal (**paste only**; user presses Enter to run).
+Sends the current clipboard contents to the active Cursor integrated Terminal and **executes automatically** after the guarded TER authorization checks pass (§4.8).
+
+Tray **Cursor Terminal** uses the same guarded AUTO-EXECUTE behavior.
+
+These guards reduce stale/replay/race risk. They do **not** prove deliberate user intent or clipboard origin.
 
 `AGT`
 
@@ -193,6 +210,8 @@ A Cursor restart, Developer Reload, or new Terminal starts with empty runtime hi
 
 Insufficient history must produce a warning and send nothing.
 
+Empty or whitespace-only command entries do not consume history slots.
+
 ### 4.5 Status Bar position
 
 Supported positions:
@@ -222,7 +241,7 @@ Position is persisted.
 
 **Status:** verified in daily use (Product Owner, 2026).
 
-When **Cursor Models Telemetry** is enabled (tray menu → **Enabled**; persisted in local `settings.ini` under `[Telemetry]`), **AGT → GPT** automatically obtains the current **Cursor Models** displayed percentage when available and appends a single MAG telemetry footer to the clipboard payload immediately before transfer to ChatGPT Desktop:
+When **Cursor Models Telemetry** is enabled (tray menu → **Enabled**; disabled by default; persisted in local `settings.ini` under `[Telemetry]`), eligible Send-to-GPT paths automatically obtain the current **Cursor Models** displayed percentage when available and append a single MAG telemetry footer to the clipboard payload immediately before transfer to ChatGPT Desktop:
 
 ```text
 Cursor Models After: NN%
@@ -249,11 +268,72 @@ In summary (product boundary only):
 - telemetry must never be guessed, copied from an earlier value, or substituted with **Before**;
 - telemetry failure must not prevent review of an otherwise valid Cursor Agent report.
 
+**Eligible paths:**
+
+- **AGT → GPT** (Status Bar);
+- **Ctrl+Alt+Shift+G** (Global Send-to-GPT);
+- tray **Send to ChatGPT**;
+- `magWorkflowBridge.sendToChatGPT`.
+
 **Not in scope for this verified capability:**
 
 - `TER → GPT`, `2`, and `3` do not append Cursor Models telemetry;
 - companion **AGT** sends to Cursor Agent only (no automatic telemetry on that path);
-- true one-click extraction of the latest completed Agent response without prior Copy remains future work (§7, §16).
+- companion/tray **TER** and terminal execution paths do not append telemetry;
+- true one-click extraction of the latest completed Agent response without prior Copy remains blocked future work (§7, §16, U3/U4).
+
+### 4.7 Global Send-to-GPT (verified)
+
+**Status:** shipped convenience capability; **not** automatic Agent response extraction.
+
+Current behavior:
+
+```text
+Ctrl+Alt+Shift+G
+or tray Send to ChatGPT
+→ current clipboard
+→ ChatGPT Desktop
+→ auto-submit
+```
+
+Uses the existing Send-to-ChatGPT pipeline.
+
+When Cursor Models telemetry is enabled and available, this path may append `Cursor Models After: NN%`.
+
+The user must place content on the clipboard first.
+
+This does **not** identify, select, or extract the latest Cursor Agent response.
+
+### 4.8 TER authorization guards (verified)
+
+Companion **TER** and tray **Cursor Terminal** are guarded AUTO-EXECUTE paths.
+
+Before execution, the Windows component and extension apply:
+
+- non-empty clipboard validation;
+- clipboard sequence freshness (`terminalConsumedSeq`);
+- normalized SHA-256 content fingerprint;
+- same-consumed-content replay rejection;
+- expected fingerprint passed through the guarded URI;
+- extension-side actual-vs-expected fingerprint verification;
+- fail-closed behavior on mismatch/race;
+- one-use consumption on successful authorization.
+
+**CLEAR** / **CLEAR TER** marks the current clipboard generation consumed and resets replay fingerprint without modifying clipboard contents. A new **Copy** is required before **TER** can authorize again.
+
+On Windows component startup, the current clipboard generation is already treated as consumed for Companion/Tray **TER** until a new **Copy** occurs.
+
+Command Palette `magWorkflowBridge.sendToCursorTerminal` remains a separate AUTO-EXECUTE path without the Companion/Tray guarded authorization model.
+
+`Ctrl+Alt+T` remains paste-only to **Windows Terminal** and is unrelated to Cursor integrated Terminal TER.
+
+### 4.9 CLIP_OBS production policy (verified)
+
+Passive clipboard diagnostic observation (**CLIP_OBS**) is **disabled by default** in production.
+
+Source-level diagnostic capability may remain for deliberate troubleshooting only.
+
+CLIP_OBS is not a normal product feature, is not part of TER authorization, and must not be represented as always-on clipboard observation/logging.
 
 ---
 
@@ -463,8 +543,8 @@ This development plan documents MAG GPT|Cursor|Sync product behavior only.
 
 When **Cursor Models Telemetry** is enabled:
 
-1. User places the Cursor Agent report on the clipboard (explicit copy workflow).
-2. User clicks **AGT → GPT** (Status Bar) or invokes `magWorkflowBridge.sendToChatGPT`.
+1. User places content on the clipboard (explicit copy workflow).
+2. User clicks **AGT → GPT** (Status Bar), uses **Ctrl+Alt+Shift+G** / tray **Send to ChatGPT**, or invokes `magWorkflowBridge.sendToChatGPT`.
 3. MAG calls `getCursorModelsPercentage()` via `cursorUsageProvider.js` (bounded Cursor-owned HTTPS request using transient local session access; no credential persistence).
 4. On success, MAG strips any existing MAG telemetry footer and appends `Cursor Models After: NN%` to the clipboard payload.
 5. MAG transfers the prepared text to ChatGPT Desktop and sends it.
@@ -761,24 +841,47 @@ Latest completed Cursor Agent response
 Current Cursor Models percentage
 ```
 
-**Status:**
+**Status:** **PARTIAL**
 
 ```text
-Cursor Models percentage — verified (production telemetry; §4.6, §10.1.1)
-Latest completed Cursor Agent response — not verified; formal read-only probe still proposed
+Cursor Models portion — PASS (verified and shipped through U2 telemetry; §4.6, §10.1.1)
+Agent extraction portion — PARTIAL (not PASS)
 ```
+
+**Cursor Models portion:** complete. No further Models-only U1 probe is required.
+
+**Agent extraction portion (Cursor 3.17.21 read-only research):**
+
+Confirmed:
+
+- stable composer identity and workspace-to-composer-set mapping;
+- ordered conversation/message structures sufficient for research purposes.
+
+Not established:
+
+- deterministic external workspace/window → currently active composer mapping;
+- persisted single authoritative active-composer mapping suitable for safe deterministic external extraction;
+- complete role/completion semantics for intended end-to-end extraction.
+
+Runtime focus/selection state exists in Cursor, but no safe deterministic mapping was verified for production Agent extraction.
+
+**Research policy:**
+
+- pause further Agent-storage research;
+- reopen only if Cursor architecture/API/persisted state materially changes or new deterministic evidence appears;
+- do not use newest/global-newest heuristics;
+- do not allow cross-project bleed.
+
+U1 Agent extraction must fail rather than guess.
 
 Expected research output (Agent portion still outstanding):
 
 ```text
 Latest Agent response:
 <exact latest completed response>
-
-Cursor Models:
-54%
 ```
 
-Requirements:
+Requirements for any future Agent probe:
 
 - read-only;
 - no `[MAG] GPT|Cursor|Sync` production modification;
@@ -793,11 +896,9 @@ The probe must document exactly where each value came from.
 
 Success requires comparison against the visible Cursor UI.
 
-U1 must fail rather than guess.
-
 ### U2 — CursorUsageProvider
 
-**Status:** implemented and verified in production (`cursorUsageProvider.js`).
+**Status:** **COMPLETE / shipped**
 
 Implement an isolated provider:
 
@@ -820,9 +921,24 @@ Requirements (met by current implementation):
 
 ### U3 — CursorAgentReportProvider
 
-**Status:** not implemented — proposed.
+**Status:** **BLOCKED**
+
+Reason:
+
+- U1 Agent extraction gate did not PASS;
+- deterministic active-composer identification remains unresolved.
 
 Only after successful U1 Agent-storage verification.
+
+Current safe fallback:
+
+```text
+manual Copy Message
+→ AGT → GPT
+or Global Send-to-GPT
+```
+
+This fallback is clipboard-based. It is **not** automatic Agent response extraction.
 
 Implement an isolated provider for:
 
@@ -846,7 +962,18 @@ Because Cursor storage is undocumented, all schema-specific logic must remain is
 
 ### U4 — One-Click GPT Pipeline
 
-**Status:** partial — telemetry append on explicit **AGT → GPT** is verified; automatic Agent report extraction (U3) is not.
+**Status:** **BLOCKED** for the original automatic workflow scope.
+
+Reason:
+
+- U3 is blocked;
+- automatic latest completed Agent response extraction is not available.
+
+**Separate delivered capability (not U4 completion):**
+
+Global Send-to-GPT (`Ctrl+Alt+Shift+G`, tray **Send to ChatGPT**) sends the **current clipboard** through the existing Send-to-ChatGPT pipeline with auto-submit and optional telemetry. It does **not** identify or extract the latest Cursor Agent response.
+
+Telemetry append on explicit **AGT → GPT** is verified (U2). That is not completion of the original U4 automatic Agent-extraction workflow.
 
 Only after U2 and U3 are independently reliable.
 
@@ -877,9 +1004,28 @@ Usage extraction failure
 
 ### U5 — Regression and Failure Validation
 
-**Status:** not complete — proposed full validation pass after U3/U4.
+**Status:** **PARTIAL / NOT COMPLETE**
 
-Validate:
+Confirmed manual/live validation exists for substantial current behavior, including:
+
+- Terminal history **2** / **3**;
+- empty terminal-history entry filtering;
+- optional Cursor Models telemetry;
+- Global Send-to-GPT;
+- guarded TER AUTO-EXECUTE (Companion and Tray);
+- TER sequence freshness guard;
+- TER content replay guard;
+- **CLEAR TER** recovery;
+- Status Bar Left/Center positioning;
+- paste-only global hotkey regression (`Ctrl+Alt+C`, `Ctrl+Alt+T`, `Ctrl+Alt+G`).
+
+Not complete:
+
+- no comprehensive automated test suite;
+- Agent extraction validation remains blocked pending U3;
+- full U3/U4 failure-matrix validation not applicable until those gates open.
+
+Remaining proposed validation (when gates permit):
 
 - Agent extraction;
 - completed-response detection;
@@ -905,7 +1051,11 @@ No existing workflow may be broken merely to introduce one-click Agent transfer.
 
 ### U6 — UX Simplification
 
+**Status:** **NOT STARTED / NOT ELIGIBLE** under current gates.
+
 Future concept only.
+
+Requires proven reliable one-click behavior according to the roadmap's intended scope (U3/U4). Unrelated convenience features that have shipped do not satisfy this gate.
 
 After one-click is proven reliable, evaluate whether the Status Bar can be simplified.
 
@@ -928,6 +1078,8 @@ Secondary operations could remain available through:
 Do not remove existing controls until the replacement workflow is proven better and explicitly approved.
 
 ### U7 — Windows Packaging
+
+**Status:** **NOT STARTED / NOT ELIGIBLE** under current gates.
 
 Only after the runtime architecture is stable.
 
@@ -1195,25 +1347,27 @@ A provider failure after a Cursor update should degrade one capability rather th
 
 ## 25. Version policy
 
-Current stable baseline remains:
+Previous stable baseline:
 
 ```text
 1.0.0
 ```
 
-Research procedures do not require a version bump.
-
-Read-only probes do not establish a new release.
-
-A future functional release containing reliable automated Cursor telemetry and/or true one-click Agent transfer may justify:
+Approved next release scope:
 
 ```text
 1.1.0
 ```
 
-but no version number is approved merely by this document.
+The `1.1.0` scope includes verified capabilities documented in §4 (guarded TER AUTO-EXECUTE, TER guards, Global Send-to-GPT, optional telemetry, Terminal history **2**/**3**, CLIP_OBS disabled by default, and related documentation reconciliation).
 
-Version changes require Product Owner approval after the intended release scope is known.
+It does **not** include U3/U4 automatic Agent response extraction.
+
+Research procedures do not require a version bump.
+
+Read-only probes do not establish a new release.
+
+Version metadata changes (`package.json`, extension manifest, tags, release artifacts) require separate Product Owner approval after release scope is finalized.
 
 ---
 
@@ -1272,68 +1426,64 @@ Unless separately approved, do NOT implement:
 Conceptual sequence:
 
 ```text
-Current v1.0.0 baseline + verified AGT → GPT After telemetry (§4.6)
+v1.0.0 baseline
         ↓
-U1 — Agent response read-only feasibility probe (Models portion satisfied)
+U2 — CursorUsageProvider (COMPLETE / shipped)
         ↓
-U2 — CursorUsageProvider (implemented)
+v1.1.0 verified capabilities (§4): TER guards, guarded AUTO-EXECUTE,
+Global Send-to-GPT, telemetry, Terminal history 2/3, CLIP_OBS policy, etc.
         ↓
-U3 — CursorAgentReportProvider (proposed)
+U1 — PARTIAL (Models PASS; Agent extraction PARTIAL, research paused)
         ↓
-U4 — True One-Click GPT pipeline (partial: telemetry only)
+U3 — CursorAgentReportProvider (BLOCKED — requires U1 Agent PASS)
         ↓
-U5 — Full regression/failure validation (proposed)
+U4 — True One-Click GPT pipeline (BLOCKED — requires U3)
         ↓
-U6 — Optional UX simplification
+U5 — Regression/failure validation (PARTIAL / NOT COMPLETE)
         ↓
-U7 — EXE + Windows installer
+U6 — Optional UX simplification (NOT STARTED / NOT ELIGIBLE)
+        ↓
+U7 — EXE + Windows installer (NOT STARTED / NOT ELIGIBLE)
 ```
+
+**Gates preserved:**
+
+- U3 requires successful U1 Agent-storage/extraction verification.
+- U4 original automatic workflow requires the necessary U3 capability.
+- U6 requires proven reliable one-click behavior according to the roadmap's intended scope.
+- U7 requires stable runtime architecture.
+
+Global Send-to-GPT is a separately delivered clipboard-based convenience capability. It does not satisfy U3 or complete U4.
 
 This ordering exists to reduce risk.
 
-The most uncertain remaining dependency is reliable local Agent response extraction (U3).
+The most uncertain remaining dependency is reliable local Agent response extraction (U3), which remains blocked pending U1 Agent PASS.
 
 ---
 
 ## 29. Immediate next step
 
-The next proposed technical procedure is:
+**Agent-storage research is paused** (§16 U1).
+
+No further U1 Agent probe is authorized unless Cursor architecture/API/persisted state materially changes or new deterministic evidence appears.
+
+**Current safe workflow for Cursor → ChatGPT Agent content:**
 
 ```text
-U1 — Cursor Agent Report Read-Only Feasibility Probe
+manual Copy Message (or other explicit clipboard copy)
+→ AGT → GPT
+or Global Send-to-GPT
 ```
 
-Purpose:
+This is clipboard-based transfer, not automatic Agent response extraction.
 
-Prove that MAG can reliably obtain:
+**Cursor Models percentage** is obtained reliably in production (U2 / §4.6).
 
-```text
-Latest completed Cursor Agent response
-```
+**U3/U4 production Agent extraction** remains blocked until U1 Agent extraction passes.
 
-without:
+**U5** comprehensive automated validation remains incomplete.
 
-- modifying `[MAG] GPT|Cursor|Sync`;
-- modifying Cursor;
-- UI Automation;
-- OCR;
-- screenshots;
-- clipboard dependency;
-- sending anything to ChatGPT;
-- Git changes.
-
-**Cursor Models percentage** is already obtained reliably in production (§4.6); a separate Models-only U1 probe is no longer the gating next step.
-
-Expected proof output:
-
-```text
-Latest Agent response:
-<exact response>
-```
-
-The value must then be manually compared against Cursor itself.
-
-Only after successful Agent verification should U3/U4 production Agent extraction be considered.
+**U6/U7** are not eligible under current gates.
 
 ---
 
@@ -1358,13 +1508,18 @@ The Product Owner retains final approval over:
 Current state:
 
 ```text
-v1.0.0 baseline: existing
-AGT → GPT automatic Cursor Models After telemetry: verified (§4.6)
-Future direction: documented
-U1 Agent probe: proposed next step
-U2: implemented (telemetry provider)
-U3–U4 Agent one-click: not implemented
-U5–U7: not authorized
+v1.0.0 baseline: shipped
+v1.1.0 scope: documented (§4, §25)
+U1: PARTIAL (Models PASS; Agent extraction PARTIAL; research paused)
+U2: COMPLETE / shipped
+U3: BLOCKED
+U4: BLOCKED (Global Send-to-GPT shipped separately; not U4 completion)
+U5: PARTIAL / NOT COMPLETE
+U6: NOT STARTED / NOT ELIGIBLE
+U7: NOT STARTED / NOT ELIGIBLE
+Guarded TER AUTO-EXECUTE: verified (Companion + Tray)
+CLIP_OBS: disabled by default in production
+Future Agent one-click direction: documented, not implemented
 ```
 
 No future stage should begin automatically.
