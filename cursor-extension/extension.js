@@ -14,7 +14,8 @@ const SEND_TO_TERMINAL = "magWorkflowBridge.sendToCursorTerminal";
 const COPY_LAST_COMMAND_AND_OUTPUT = "workbench.action.terminal.copyLastCommandAndLastCommandOutput";
 const STATUS_BAR_POSITION_KEY = "magWorkflowBridge.statusBarPosition";
 const DEFAULT_STATUS_BAR_POSITION = "center";
-const MAG_STATUS_BAR_COLOR = "#6E2323";
+const MAG_STATUS_BAR_FOREGROUND_DARK = "#F0F0F0";
+const MAG_STATUS_BAR_FOREGROUND_LIGHT = "#141414";
 const MAG_SETTINGS_DIR_NAME = "MAG-GPT-Cursor-Sync";
 const CURSOR_MODELS_TELEMETRY_FOOTER_RE = /\n*Cursor Models After: (?:\d+%|unavailable)\s*$/u;
 const TERMINAL_FINGERPRINT_RE = /^[a-f0-9]{64}$/i;
@@ -509,6 +510,21 @@ async function initializeStatusBarPosition(context) {
 	createMagStatusBarItems(normalized);
 }
 
+function getMagStatusBarForegroundColor() {
+	const kind = vscode.window.activeColorTheme.kind;
+	if (kind === vscode.ColorThemeKind.Light || kind === vscode.ColorThemeKind.HighContrastLight) {
+		return MAG_STATUS_BAR_FOREGROUND_LIGHT;
+	}
+	return MAG_STATUS_BAR_FOREGROUND_DARK;
+}
+
+function applyMagStatusBarForegroundColors() {
+	const color = getMagStatusBarForegroundColor();
+	for (const item of magStatusBarItems) {
+		item.color = color;
+	}
+}
+
 function disposeMagStatusBarItems() {
 	for (const item of magStatusBarItems) {
 		item.dispose();
@@ -519,12 +535,13 @@ function disposeMagStatusBarItems() {
 function createMagStatusBarItems(position) {
 	disposeMagStatusBarItems();
 	const layout = STATUS_BAR_LAYOUTS[normalizeStatusBarPosition(position)];
+	const color = getMagStatusBarForegroundColor();
 	for (let index = 0; index < MAG_STATUS_BAR_SPECS.length; index += 1) {
 		const spec = MAG_STATUS_BAR_SPECS[index];
 		const item = vscode.window.createStatusBarItem(layout.alignment, layout.priorities[index]);
 		item.text = spec.text;
 		item.tooltip = spec.tooltip;
-		item.color = MAG_STATUS_BAR_COLOR;
+		item.color = color;
 		item.command = spec.command;
 		item.show();
 		magStatusBarItems.push(item);
@@ -582,6 +599,9 @@ function activate(context) {
 		vscode.commands.registerCommand(SEND_TO_TERMINAL, () => sendToCursorTerminal()),
 		vscode.window.registerUriHandler({ handleUri: (uri) => handleExternalUri(context, uri) }),
 		{ dispose: disposeMagStatusBarItems },
+		vscode.window.onDidChangeActiveColorTheme(() => {
+			applyMagStatusBarForegroundColors();
+		}),
 		vscode.window.onDidStartTerminalShellExecution((event) => {
 			beginShellExecutionCapture(event);
 		}),
