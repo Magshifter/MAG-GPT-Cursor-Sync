@@ -11,7 +11,7 @@ Public repository name: `MAG-GPT-Cursor-Sync`.
 
 Some internal technical identifiers intentionally retain the historical `MAG Workflow Bridge` name for compatibility.
 
-Current version: **1.1.0**
+Current version: **1.1.1**
 
 ## Purpose
 
@@ -47,6 +47,19 @@ The Cursor extension provides one MAG status-bar group:
 **TER → GPT | 2 | 3 | AGT → GPT**
 
 The four actions are intentionally separate.
+
+### Status bar presentation
+
+The status-bar labels use theme-aware foreground colors via the native Cursor extension API:
+
+| Theme family | Foreground |
+|---|---|
+| Dark / High Contrast Dark | `#F0F0F0` |
+| Light / High Contrast Light | `#141414` |
+
+Foreground updates immediately when the active Cursor color theme changes.
+
+The native `StatusBarItem` API does not support bold text styling.
 
 ### AGT → GPT
 
@@ -1180,7 +1193,7 @@ https://github.com/Magshifter/MAG-GPT-Cursor-Sync
 Current version:
 
 ```text
-1.1.0
+1.1.1
 ```
 
 Author:

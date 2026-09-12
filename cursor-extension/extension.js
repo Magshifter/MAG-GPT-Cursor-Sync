@@ -19,6 +19,7 @@ const MAG_STATUS_BAR_FOREGROUND_LIGHT = "#141414";
 const MAG_SETTINGS_DIR_NAME = "MAG-GPT-Cursor-Sync";
 const CURSOR_MODELS_TELEMETRY_FOOTER_RE = /\n*Cursor Models After: (?:\d+%|unavailable)\s*$/u;
 const TERMINAL_FINGERPRINT_RE = /^[a-f0-9]{64}$/i;
+const TER_GPT_CAPTURE_WAIT_MS = 2000;
 
 const STATUS_BAR_LAYOUTS = {
 	left: {
@@ -136,6 +137,32 @@ function formatExecutionsMessage(entries) {
 		.join("\n\n");
 }
 
+function formatLastExecutionPayload(entry) {
+	const command = entry.commandLine || "";
+	const output = entry.output || "";
+	return `${command}\n${output}`;
+}
+
+function hasPendingCaptureForTerminal(terminal) {
+	for (const pending of pendingExecutions.values()) {
+		if (pending.terminal === terminal) {
+			return true;
+		}
+	}
+	return false;
+}
+
+async function waitUntilNoPendingCaptureForTerminal(terminal, timeoutMs) {
+	const deadline = Date.now() + timeoutMs;
+	while (hasPendingCaptureForTerminal(terminal)) {
+		if (Date.now() >= deadline) {
+			return false;
+		}
+		await delay(50);
+	}
+	return true;
+}
+
 function beginShellExecutionCapture(event) {
 	const terminal = event.terminal;
 	const execution = event.execution;
@@ -166,31 +193,30 @@ async function completeShellExecutionCapture(event) {
 		return;
 	}
 
-	pendingExecutions.delete(execution);
-
 	try {
 		await pending.streamDone;
+
+		const commandLine =
+			(execution.commandLine && typeof execution.commandLine.value === "string"
+				? execution.commandLine.value
+				: "") || "";
+		// Empty/whitespace Shell Integration executions must not consume history slots.
+		if (commandLine.trim() === "") {
+			return;
+		}
+		const output = normalizeTerminalOutput(pending.chunks.join(""));
+		const exitCode = typeof event.exitCode === "number" ? event.exitCode : undefined;
+
+		pushCompletedExecution(terminal, {
+			commandLine,
+			output,
+			exitCode,
+		});
 	} catch {
 		// Incomplete streams are not stored as completed history.
-		return;
+	} finally {
+		pendingExecutions.delete(execution);
 	}
-
-	const commandLine =
-		(execution.commandLine && typeof execution.commandLine.value === "string"
-			? execution.commandLine.value
-			: "") || "";
-	// Empty/whitespace Shell Integration executions must not consume history slots.
-	if (commandLine.trim() === "") {
-		return;
-	}
-	const output = normalizeTerminalOutput(pending.chunks.join(""));
-	const exitCode = typeof event.exitCode === "number" ? event.exitCode : undefined;
-
-	pushCompletedExecution(terminal, {
-		commandLine,
-		output,
-		exitCode,
-	});
 }
 
 function clearTerminalState(terminal) {
@@ -319,6 +345,32 @@ async function sendLastTerminalOutputToChatGPT(context) {
 	}
 
 	terminal.show(false);
+
+	const hadPendingCapture = hasPendingCaptureForTerminal(terminal);
+	if (hadPendingCapture) {
+		const settled = await waitUntilNoPendingCaptureForTerminal(terminal, TER_GPT_CAPTURE_WAIT_MS);
+		if (!settled) {
+			void vscode.window.showWarningMessage(
+				"Latest terminal command is still being captured. Try TER → GPT again."
+			);
+			return;
+		}
+	}
+
+	const history = getHistory(terminal);
+	if (history.length > 0) {
+		const payload = formatLastExecutionPayload(history[history.length - 1]);
+		await vscode.env.clipboard.writeText(payload);
+		await sendToChatGPT(context);
+		return;
+	}
+
+	if (hadPendingCapture) {
+		void vscode.window.showWarningMessage(
+			"Could not obtain last terminal command and output. Try TER → GPT again."
+		);
+		return;
+	}
 
 	// Sentinel so we never send pre-existing clipboard if the terminal copy fails.
 	const marker = `__MAG_WF_BRIDGE_TERM_${Date.now()}__`;

@@ -2,7 +2,7 @@
 	"name": "mag-workflow-bridge",
 	"displayName": "[MAG] GPT|Cursor|Sync",
 	"description": "Clipboard bridge between ChatGPT desktop, Cursor Agent, and Cursor integrated Terminal.",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"publisher": "magshifter",
 	"engines": {
 		"vscode": "^1.75.0"

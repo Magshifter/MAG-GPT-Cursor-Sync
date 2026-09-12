@@ -25,11 +25,11 @@ Current local repository directory:
 
 Current planning release:
 
-`1.1.0`
+`1.1.1`
 
 Previous stable baseline:
 
-`1.0.0`
+`1.1.0`
 
 This document exists to preserve continuity between ChatGPT Project conversations and future development sessions.
 
@@ -85,11 +85,11 @@ The application must not silently execute unrelated actions or guess the user's 
 
 Approved release scope:
 
-`v1.1.0`
+`v1.1.1`
 
 Previous shipped baseline:
 
-`v1.0.0`
+`v1.1.0`
 
 The existing implementation combines:
 
@@ -106,6 +106,7 @@ The existing implementation combines:
 - TER authorization/replay guards and **CLEAR TER** recovery;
 - optional Cursor Models telemetry (disabled by default);
 - Status Bar position Left/Center (default Center);
+- theme-aware Status Bar foreground colors with runtime theme-switch updates (§4.10);
 - runtime Terminal history for **2** / **3** (max 3, per-terminal, non-persistent).
 
 ### 4.1 Global paste-only hotkeys
@@ -334,6 +335,31 @@ Passive clipboard diagnostic observation (**CLIP_OBS**) is **disabled by default
 Source-level diagnostic capability may remain for deliberate troubleshooting only.
 
 CLIP_OBS is not a normal product feature, is not part of TER authorization, and must not be represented as always-on clipboard observation/logging.
+
+### 4.10 Status Bar presentation (verified)
+
+The Cursor status-bar group:
+
+```text
+TER → GPT | 2 | 3 | AGT → GPT
+```
+
+uses theme-aware foreground colors via the native Cursor extension API.
+
+Mapping:
+
+```text
+Dark / High Contrast Dark → #F0F0F0
+Light / High Contrast Light → #141414
+```
+
+Foreground updates immediately when the active Cursor color theme changes.
+
+This replaces the prior fixed dark-maroon foreground (`#6E2323`), which had low contrast on dark themes.
+
+The native `StatusBarItem` API does not support bold text styling.
+
+No change to status-bar labels, order, commands, tooltips, priorities, Left/Center positioning, or action behavior.
 
 ---
 
@@ -1350,16 +1376,25 @@ A provider failure after a Cursor update should degrade one capability rather th
 Previous stable baseline:
 
 ```text
-1.0.0
-```
-
-Approved next release scope:
-
-```text
 1.1.0
 ```
 
-The `1.1.0` scope includes verified capabilities documented in §4 (guarded TER AUTO-EXECUTE, TER guards, Global Send-to-GPT, optional telemetry, Terminal history **2**/**3**, CLIP_OBS disabled by default, and related documentation reconciliation).
+Approved release scope:
+
+```text
+1.1.1
+```
+
+The `1.1.1` scope is a patch release limited to Cursor status-bar readability and theme-awareness (§4.10):
+
+- replaces the fixed dark-maroon status-bar foreground (`#6E2323`);
+- Dark / High Contrast Dark use `#F0F0F0`;
+- Light / High Contrast Light use `#141414`;
+- foreground updates when the active Cursor theme changes;
+- no bold styling (native `StatusBarItem` API limitation);
+- no AHK, telemetry, terminal-history, replay-guard, Global Send, companion, tray, or hotkey behavior change.
+
+The `1.1.0` scope remains the prior shipped functional baseline documented in §4.
 
 It does **not** include U3/U4 automatic Agent response extraction.
 
@@ -1432,6 +1467,9 @@ U2 — CursorUsageProvider (COMPLETE / shipped)
         ↓
 v1.1.0 verified capabilities (§4): TER guards, guarded AUTO-EXECUTE,
 Global Send-to-GPT, telemetry, Terminal history 2/3, CLIP_OBS policy, etc.
+        ↓
+v1.1.1 status-bar readability patch (§4.10): theme-aware foreground,
+runtime theme-switch updates; no functional behavior change
         ↓
 U1 — PARTIAL (Models PASS; Agent extraction PARTIAL, research paused)
         ↓
@@ -1509,7 +1547,8 @@ Current state:
 
 ```text
 v1.0.0 baseline: shipped
-v1.1.0 scope: documented (§4, §25)
+v1.1.0: shipped
+v1.1.1 scope: status-bar readability patch (§4.10, §25)
 U1: PARTIAL (Models PASS; Agent extraction PARTIAL; research paused)
 U2: COMPLETE / shipped
 U3: BLOCKED
