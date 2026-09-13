@@ -41,23 +41,22 @@ It does not independently authorize implementation, Git operations, version chan
 
 ## 2. Project classification
 
-`[MAG] GPT|Cursor|Sync` is a standalone MAG-branded development utility.
-
-It is NOT currently a numbered MAG Ecosystem product project.
+`[MAG] GPT|Cursor|Sync` is MAG development identity **A1**: a registered MAG Ecosystem development identity, but it is not a XenForo `#N` project.
 
 Do not assign:
 
 `#3`
 
-or any other permanent MAG project number unless the Product Owner explicitly approves that classification in the future.
+or any other XenForo `#N` identity to this product. A1 lives in the `A<N>` namespace and must not consume a `#N` slot.
 
-The tool may follow applicable MAG development discipline and AI-agent rules without becoming a numbered XenForo/MAG product project.
+The product follows applicable MAG Global HOW under **GLOBAL + A1**. It does not use the XenForo `#N` add-on lifecycle or the nine-document XenForo package.
 
 It must remain isolated from:
 
-- `MAG-Ecosystem`
+- `MAG-Ecosystem` product WHAT of other developments
 - `GlobalLinksFavicons`
 - `TagSynchronizer`
+- `DocGuide`
 - other MAG project repositories
 
 unless a future explicitly approved task requires cross-project work.

@@ -3,7 +3,9 @@ by Magshifter
 
 Standalone Windows development utility for fast synchronization between **ChatGPT Desktop**, **Cursor Agent**, and **Cursor Terminal**.
 
-This is not a numbered MAG Ecosystem project.
+A1 is a registered MAG Ecosystem development identity, but it is not a XenForo `#N` project.
+
+It must not consume `#3` or any other `#N` slot.
 
 Current repository directory: `MAG-Workflow-Bridge`.
 
