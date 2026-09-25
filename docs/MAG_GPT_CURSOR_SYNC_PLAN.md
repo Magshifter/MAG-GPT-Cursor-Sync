@@ -49,7 +49,7 @@ Do not assign:
 
 or any other XenForo `#N` identity to this product. A1 lives in the `A<N>` namespace and must not consume a `#N` slot.
 
-The product follows applicable MAG Global HOW under **GLOBAL + A1**. It does not use the XenForo `#N` add-on lifecycle or the nine-document XenForo package.
+The product follows applicable MAG Global HOW under **GLOBAL + A1**. It uses Global Core, not the numbered `#N` XenForo lifecycle. It does not use the `#N` conceptual eight-document XenForo package. A1 documentation is the approved actual set for this Software Product (currently this PLAN, plus the repository README); do not impose a fixed XenForo package size or create missing `#N` containers.
 
 It must remain isolated from:
 
