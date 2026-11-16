@@ -23,9 +23,15 @@ here differs from the canon, the canon wins.
 2. Read the product `docs/ROADMAP.md` item the prompt names and its
    latest increment records before changing anything. Reuse the
    approved artifacts recorded there.
-3. Implement only the received prompt in its repository.
-4. Persistence as `docs/CORE.md` Persistence.
-5. Design work follows the product AGENTS.md MAGDC block only.
+3. Before writing code, read §0 Golden Standard of
+   `docs/policies/action/CORE_IMPLEMENTATION_CLEANLINESS.md` (MAGDC)
+   and the product's own cleanliness policy when it has one; proof is
+   the prompt's cleanliness or quality-gate output. Implement only
+   the received prompt in its repository.
+4. Before persistence, run the prompt's roadmap-basis --worktree
+   --lint --since and add the markers each finding names.
+5. Persistence as `docs/CORE.md` Persistence.
+6. Design work follows the product AGENTS.md MAGDC block only.
 
 ## Not yours
 Review, verification, debugging ownership and release (grok-bot);
@@ -35,3 +41,5 @@ planning and canon (chatgpt-boss); design and the library
 ## End
 Every run ends with MAGDC RESULT exactly as `docs/ai/rules.yaml`
 executor_report, including the roadmap field.
+When executor_report review_bundle requires it, the REVIEW BUNDLE
+block from `magdc review-bundle` comes directly before that block.
