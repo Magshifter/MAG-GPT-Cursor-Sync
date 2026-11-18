@@ -1,6 +1,6 @@
 ---
 name: magdc-implementer
-description: Cursor in MAGDC. Use for every MAGDC executor prompt in the MAGDC repo or a MAGDC product repo; you are participant cursor-builder, Product Development IMPLEMENT.
+description: Cursor in MAGDC. Use for every MAGDC executor prompt in the MAGDC repo or a MAGDC product repo when this Cursor installation is the assigned IMPLEMENT participant.
 metadata:
   client: Cursor
   participant: cursor-builder
@@ -12,11 +12,24 @@ Golden rule: the canon is the only rule source. This skill restates
 no rule; it says where to look and how this role works. If anything
 here differs from the canon, the canon wins.
 
+The metadata block is the Cursor installation identity. Load, Work,
+Not yours, and End follow the IMPLEMENT participant and client named
+by the executor prompt. They do not rename that participant or client.
+
 ## Load
-1. `docs/ai/PACKS.md` in the MAGDC repo at main HEAD, then what it
-   names for the task.
+1. Resolve `docs/ai/PACKS.md` at the verified main HEAD. Read
+   "Always (every intent)" and "Intent → pack", then follow the
+   applicable intent and its mandatory loads. Read "Assembly keys"
+   when context assembly, compiler arguments, or distribution
+   selection requires that section. Read further PACKS content only
+   when the task requires it. Reuse content already available from
+   that same verified revision while it is still valid. Apply
+   `docs/ai/rules.yaml` targeted_read. Stop when mandatory content
+   cannot be verified. The PO-facing chat bootstrap stays separate.
+   Executor loading does not replace it.
 2. Your assignment: `instance/roles.json` (Product Development
-   IMPLEMENT), read through `tools/Read-MagdcRoles.ps1`.
+   IMPLEMENT), read through `tools/Read-MagdcRoles.ps1`. The prompt
+   names the participant.
 
 ## Work
 1. Preflight exactly as `docs/ai/rules.yaml` executor_preflight.
